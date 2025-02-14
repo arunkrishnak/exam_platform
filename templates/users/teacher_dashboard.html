@@ -1,0 +1,36 @@
+{% extends 'base.html' %}
+{% block content %}
+    <h2>Teacher Dashboard</h2>
+    <p>Welcome, Teacher {{ user.username }}!</p>
+
+    <h3>Upload PDF</h3>
+    <form method="post" enctype="multipart/form-data" action="{% url 'upload_pdf' %}">
+        {% csrf_token %}
+        {{ pdf_upload_form.as_p }}
+        <button type="submit">Upload PDF</button>
+    </form>
+
+    <h3>Uploaded PDFs</h3>
+    <ul>
+        {% for pdf in uploaded_pdfs %}
+            <li>
+                {{ pdf.title }} - <a href="{% url 'generate_questions_from_pdf' pdf.id %}">Generate Questions</a>
+            </li>
+        {% endfor %}
+    </ul>
+
+    <h3>Create New Exam</h3>
+    <form method="post" action="{% url 'create_exam' %}">
+        {% csrf_token %}
+        {{ exam_creation_form.as_p }}
+        <button type="submit">Create Exam</button>
+    </form>
+
+    <h3>Exams</h3>
+    <ul>
+        {% for exam in exams %}
+            <li>{{ exam.title }} - {{ exam.description }}</li>
+        {% endfor %}
+    </ul>
+
+{% endblock %}

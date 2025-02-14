@@ -1,0 +1,3 @@
+Django
+g4f
+PyPDF2
