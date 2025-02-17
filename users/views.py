@@ -30,19 +30,26 @@ def teacher_login_view(request):
         form = TeacherLoginForm(request, data=request.POST)
         if form.is_valid():
             user = form.get_user()
-            login(request, user)
-            return redirect('teacher_dashboard')
+            if user.is_teacher:  # Ensure only teachers can log in
+                login(request, user)
+                return redirect('teacher_dashboard')
+            else:
+                form.add_error(None, "Please enter a correct username and password. Note that both fields may be case-sensitive.")  # Prevent students from logging in
     else:
         form = TeacherLoginForm()
     return render(request, 'users/teacher_login.html', {'form': form})
+
 
 def student_login_view(request):
     if request.method == 'POST':
         form = StudentLoginForm(request, data=request.POST)
         if form.is_valid():
             user = form.get_user()
-            login(request, user)
-            return redirect('student_dashboard')
+            if user.is_student:  # Ensure only students can log in
+                login(request, user)
+                return redirect('student_dashboard')
+            else:
+                form.add_error(None, "Please enter a correct username and password. Note that both fields may be case-sensitive.")  # Prevent teachers from logging in
     else:
         form = StudentLoginForm()
     return render(request, 'users/student_login.html', {'form': form})
