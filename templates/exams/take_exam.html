@@ -5,12 +5,20 @@
 
     <form method="post">
         {% csrf_token %}
-        {% for question in questions %}
+        {% for question_data in prepared_questions %}  {# Iterate through prepared_questions - already randomized #}
+            {% with question=question_data.question answer_choices=question_data.answer_choices %}
             <div>
                 <h3>{{ forloop.counter }}. {{ question.text }}</h3>
-                <textarea name="question_{{ question.id }}" rows="3" cols="50"></textarea>
+                <ol type="a">
+                {% for choice in answer_choices %}  {# Iterate through answer_choices - already randomized #}
+                    <li>
+                        <input type="checkbox" name="question_{{ question.id }}" value="{{ choice.id }}" id="choice_{{ choice.id }}"> <label for="choice_{{ choice.id }}">{{ choice.text }}</label>
+                    </li>
+                {% endfor %}
+                </ol>
             </div>
             <hr>
+            {% endwith %}
         {% endfor %}
         <button type="submit">Submit Exam</button>
     </form>

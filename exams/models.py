@@ -23,10 +23,18 @@ class Exam(models.Model):
 class Question(models.Model):
     exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name='questions')
     text = models.TextField()
-    correct_answer = models.CharField(max_length=255)
+    question_type = models.CharField(max_length=20, choices=[('MCQ', 'Multiple Choice Question')], default='MCQ') # Question type field
 
     def __str__(self):
         return self.text[:50] + "..."
+
+class AnswerChoice(models.Model):
+    question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='answer_choices')
+    text = models.CharField(max_length=255)
+    is_correct = models.BooleanField(default=False)
+
+    def __str__(self):
+        return self.text[:100] + "..."
 
 class StudentExamAttempt(models.Model):
     student = models.ForeignKey(User, on_delete=models.CASCADE, limit_choices_to={'is_student': True})

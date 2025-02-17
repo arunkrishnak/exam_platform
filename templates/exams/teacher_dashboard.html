@@ -3,6 +3,14 @@
     <h2>Teacher Dashboard</h2>
     <p>Welcome, Teacher {{ user.username }}!</p>
 
+    {% if messages %}
+        <ul class="messages">
+            {% for message in messages %}
+            <li{% if message.tags %} class="{{ message.tags }}"{% endif %}>{{ message }}</li>
+            {% endfor %}
+        </ul>
+    {% endif %}
+
     <h3>Upload PDF</h3>
     <form method="post" enctype="multipart/form-data" action="{% url 'upload_pdf' %}">
         {% csrf_token %}
@@ -13,14 +21,18 @@
     <h3>Uploaded PDFs</h3>
     <ul>
         {% for pdf in uploaded_pdfs %}
-            <li>
-                {{ pdf.title }} - <a href="{% url 'generate_questions_from_pdf' pdf.id %}">Generate Questions</a>
-            </li>
+            <li>{{ pdf.title }}</li>
         {% endfor %}
     </ul>
+    {% if uploaded_pdfs %}
+        <form method="post" action="{% url 'delete_all_pdfs' %}">
+            {% csrf_token %}
+            <button type="submit" onclick="return confirm('Are you sure you want to delete ALL your PDFs?')">Delete All PDFs</button>
+        </form>
+    {% endif %}
 
     <h3>Create New Exam</h3>
-    <form method="post" action="{% url 'create_exam' %}">
+    <form method="post" action="{% url 'create_exam' %}" enctype="multipart/form-data">
         {% csrf_token %}
         {{ exam_creation_form.as_p }}
         <button type="submit">Create Exam</button>
@@ -34,18 +46,12 @@
             </li>
         {% endfor %}
     </ul>
-
-    {% if selected_exam_questions %}  {# Conditionally show question preview #}
-        <h3>Question Preview for Selected Exam</h3>
-        <ul>
-            {% for question in selected_exam_questions %}
-                <li>
-                    <p><strong>Question {{ forloop.counter }}:</strong> {{ question.text }}</p>
-                    <p><strong>Correct Answer:</strong> {{ question.correct_answer }}</p>
-                    <hr>
-                </li>
-            {% endfor %}
-        </ul>
+    {% if exams %}
+        <form method="post" action="{% url 'delete_all_exams' %}">
+            {% csrf_token %}
+            <button type="submit" onclick="return confirm('Are you sure you want to delete ALL your Exams?')">Delete All Exams</button>
+        </form>
     {% endif %}
+
 
 {% endblock %}
