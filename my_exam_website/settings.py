@@ -124,3 +124,9 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 AUTH_USER_MODEL = 'users.User'
+
+# Make sure session expiry is set correctly
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
+SESSION_COOKIE_AGE = 86400  # 1 day (set a default session expiry)
+SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
+SESSION_ENGINE = "django.contrib.sessions.backends.db"  # Store session in DB

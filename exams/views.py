@@ -4,11 +4,13 @@ from .forms import PDFUploadForm, ExamCreationForm, QuestionCreationForm, Answer
 from .models import PDFDocument, Exam, Question, StudentExamAttempt, AnswerChoice
 from PyPDF2 import PdfReader
 from g4f.client import Client
-from django.utils import timezone
 from django.contrib import messages # Import messages framework
+from .models import User 
+from .models import StudentResponse  # Import the new model
 import random
 import json
 import re
+
 
 client = Client()
 
@@ -33,9 +35,9 @@ For each question, please follow this structure EXACTLY:
 
 1. **Question Text:** Start with the question number (e.g., "Question 1:") followed by the question itself on a single line. Please ensure the question is clear and concise and relevant to the topic '{topic_prompt}'.
 
-2. **Answer Choices:** Provide {num_options} answer choices, each on a new line, labeled with lowercase letters followed by a period (e.g., "a. Choice text", "b. Another choice"). Ensure each choice is a plausible answer but only one should be definitively correct.
+2. **Answer Choices:** Provide exactly {num_options} answer choices. Use lowercase letters (a, b, c, etc.) followed by a period and a space (e.g., {" ".join([f'"{chr(97+i)}. Choice text"' for i in range(num_options)])}). Ensure each choice is unique and plausible, but only one is definitively correct.
 
-3. **Correct Answer:** On a new line after the choices, clearly indicate the correct answer by stating "Correct Answer: " followed by the letter corresponding to the correct choice (e.g., "Correct Answer: b").
+3. **Correct Answer:** On a new line after the choices, clearly indicate the correct answer by stating "Correct Answer: " followed by the letter corresponding to the correct choice (e.g., "Correct Answer: {"a" if num_options == 2 else "b"}").
 
 **Example of Desired Output Format:**
 
@@ -111,7 +113,7 @@ Question 2: ...
                     correct_answer_index = ord(correct_letter) - ord('a')
                 else:
                     # Look for lines that start with a letter followed by a period and a space.
-                    match = re.match(r'^([a-z])\.\s*(.*)', line)
+                    match = re.match(r'^([a-z])\.\s*(.+)$', line)  # Ensure it captures all answer choices dynamically
                     if match:
                         # Even if a choice text accidentally includes "Question" in it, we only consider the letter and text.
                         choice_text = match.group(2).strip()
@@ -122,8 +124,8 @@ Question 2: ...
                 answer_choices[correct_answer_index]['is_correct'] = True
 
             questions_data.append({'text': question_text, 'answer_choices': answer_choices})
-            if len(questions_data) >= num_questions:  # Stop if we have enough questions.
-                break
+            questions_data = questions_data[:num_questions]  # Ensure we only return the required number of questions.
+
 
         return questions_data
 
@@ -132,24 +134,84 @@ Question 2: ...
         return []
 
 @login_required(login_url='teacher_login')
-def teacher_dashboard_view(request): # Keep teacher dashboard as is, but remove preview from template in next step
-    if not request.user.is_teacher:
-        return redirect('home')
-    pdf_upload_form = PDFUploadForm()
-    exam_creation_form = ExamCreationForm()
-    uploaded_pdfs = PDFDocument.objects.filter(teacher=request.user)
-    exams = Exam.objects.filter(teacher=request.user)
-    selected_exam_id = request.GET.get('exam_id')
-    selected_exam_questions = None # No preview anymore in template, can remove this logic
+def student_exam_responses(request, student_id, exam_id):
+    student = get_object_or_404(User, id=student_id, is_student=True)  # ✅ Now User is defined
+    exam = get_object_or_404(Exam, id=exam_id)
+    responses = StudentResponse.objects.filter(student=student, exam=exam).select_related('question', 'selected_choice')
 
-    return render(request, 'exams/teacher_dashboard.html', {
-        'pdf_upload_form': pdf_upload_form,
-        'exam_creation_form': exam_creation_form,
-        'uploaded_pdfs': uploaded_pdfs,
-        'exams': exams,
-        'selected_exam_questions': selected_exam_questions, # Still passing, but not used in template anymore
+    return render(request, 'users/student_exam_responses.html', {
+        'student': student,
+        'exam': exam,
+        'responses': responses
     })
 
+@login_required(login_url='teacher_login')
+def teacher_dashboard_view(request):
+    if not request.user.is_teacher:
+        return redirect('home')
+
+    exams = Exam.objects.filter(teacher=request.user)
+    student_responses = StudentResponse.objects.filter(exam__in=exams).select_related('student', 'exam')
+
+    # Use a set to avoid duplicate student-exam pairs
+    student_exam_pairs = set()
+    for response in student_responses:
+        student_exam_pairs.add((response.student, response.exam))
+
+    # Convert set into a list of dictionaries for the template
+    student_responses_list = [{'student': student, 'exam': exam} for student, exam in student_exam_pairs]
+
+    exam_creation_form = ExamCreationForm()
+
+    return render(request, 'users/teacher_dashboard.html', {
+        'exams': exams,
+        'student_responses_list': student_responses_list,
+        'exam_creation_form': exam_creation_form
+    })
+
+
+
+@login_required(login_url='teacher_login')
+def delete_exam(request, exam_id):
+    if not request.user.is_teacher:
+        return redirect('home')
+
+    exam = get_object_or_404(Exam, id=exam_id, teacher=request.user)
+
+    # Ensure student responses are NOT deleted
+    StudentResponse.objects.filter(exam=exam).update(exam=None)
+
+    # Delete the exam AFTER updating student responses
+    exam.delete()
+
+    messages.success(request, "Exam deleted successfully! Student responses are retained.")
+    return redirect('teacher_dashboard')
+
+
+
+@login_required(login_url='teacher_login')
+def delete_student_response(request, student_id, exam_id):
+    if not request.user.is_teacher:
+        return redirect('home')
+
+    student = get_object_or_404(User, id=student_id, is_student=True)
+    exam = get_object_or_404(Exam, id=exam_id)
+
+    # Delete the student's responses for this exam
+    StudentResponse.objects.filter(student=student, exam=exam).delete()
+
+    messages.success(request, f"Responses for {student.username} in {exam.title} have been deleted.")
+    return redirect('teacher_dashboard')
+
+@login_required(login_url='teacher_login')
+def view_exam(request, exam_id):
+    exam = get_object_or_404(Exam, id=exam_id)
+    questions = exam.questions.prefetch_related('answer_choices').all()
+
+    return render(request, 'users/view_exam.html', {
+        'exam': exam,
+        'questions': questions
+    })
 
 @login_required(login_url='teacher_login')
 def upload_pdf(request): # Keep PDF upload independent for now - might remove later
@@ -184,7 +246,7 @@ def create_exam(request):
             pdf_file_uploaded = request.FILES.get('pdf_document')
             if pdf_file_uploaded:
                 text = extract_text_from_pdf(pdf_file_uploaded)
-                generated_questions_data = generate_questions_with_gpt(text, num_options, topic_prompt, num_questions) # Pass num_questions
+                generated_questions_data = generate_questions_with_gpt(text, num_questions=num_questions, num_options=num_options, topic_prompt=topic_prompt)# Pass num_questions
 
                 exam.save()
                 for q_data in generated_questions_data:
@@ -226,31 +288,62 @@ def delete_all_exams(request):
 def student_dashboard_view(request):
     if not request.user.is_student:
         return redirect('home')
+
     available_exams = Exam.objects.all()
-    return render(request, 'exams/student_dashboard.html', {'available_exams': available_exams})
+    attempted_exams = Exam.objects.filter(responses__student=request.user).distinct()
+
+    return render(request, 'users/student_dashboard.html', {
+        'available_exams': available_exams,
+        'attempted_exams': attempted_exams
+    })
+
+
+from django.contrib import messages
+from .models import StudentResponse  # Import the new model
 
 @login_required(login_url='student_login')
 def take_exam(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id)
+
+    if StudentResponse.objects.filter(student=request.user, exam=exam).exists():
+        messages.error(request, "You have already attempted this exam.")
+        return redirect('student_dashboard')
+
     questions = list(exam.questions.prefetch_related('answer_choices').all())
-    random.shuffle(questions)
 
     if request.method == 'POST':
-        # ... (rest of your POST request handling) ...
-        pass
+        unanswered_questions = []
 
-    # Prepare questions with randomized options for template
+        for question in questions:
+            selected_choice_id = request.POST.get(f"question_{question.id}")
+            if not selected_choice_id:
+                unanswered_questions.append(question.text)
+            else:
+                selected_choice = AnswerChoice.objects.get(id=selected_choice_id)
+                StudentResponse.objects.create(
+                    student=request.user,
+                    exam=exam,
+                    question=question,
+                    selected_choice=selected_choice
+                )
+
+        if unanswered_questions:
+            messages.error(request, "Please answer all questions before submitting.")
+            return redirect('take_exam', exam_id=exam.id)
+
+        messages.success(request, "Exam submitted successfully!")
+        return redirect('student_dashboard')
+
     prepared_questions = []
     for question in questions:
         answer_choices_list = list(question.answer_choices.all())
         random.shuffle(answer_choices_list)
-        prepared_questions.append({
-            'question': question,
-            'answer_choices': answer_choices_list,
-        })
-
-    print("DEBUG - prepared_questions:", prepared_questions)  # Add this line for debugging
+        prepared_questions.append({'question': question, 'answer_choices': answer_choices_list})
 
     return render(request, 'exams/take_exam.html', {'exam': exam, 'prepared_questions': prepared_questions})
+
+
+
+
 def home(request):
     return render(request, 'home.html')

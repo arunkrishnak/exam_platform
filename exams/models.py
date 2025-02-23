@@ -1,6 +1,7 @@
 from django.db import models
-from users.models import User
+from django.contrib.auth import get_user_model
 
+User = get_user_model() 
 class PDFDocument(models.Model):
     teacher = models.ForeignKey(User, on_delete=models.CASCADE, limit_choices_to={'is_teacher': True})
     title = models.CharField(max_length=255)
@@ -9,6 +10,17 @@ class PDFDocument(models.Model):
 
     def __str__(self):
         return self.title
+    
+class StudentResponse(models.Model):
+    student = models.ForeignKey(User, on_delete=models.CASCADE, limit_choices_to={'is_student': True})
+    exam = models.ForeignKey('Exam', on_delete=models.SET_NULL, null=True, blank=True, related_name="responses")  # ✅ Allow NULL
+    question = models.ForeignKey('Question', on_delete=models.CASCADE)
+    selected_choice = models.ForeignKey('AnswerChoice', on_delete=models.SET_NULL, null=True, blank=True)
+    submitted_at = models.DateTimeField(auto_now_add=True)
+
+    def __str__(self):
+        return f"{self.student.username} - {self.exam.title if self.exam else 'Exam Deleted'} - {self.question.text[:30]}"
+
 
 class Exam(models.Model):
     teacher = models.ForeignKey(User, on_delete=models.CASCADE, limit_choices_to={'is_teacher': True})

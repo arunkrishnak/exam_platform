@@ -1,36 +1,89 @@
 {% extends 'base.html' %}
+
+{% block title %}Teacher Dashboard{% endblock %}
+
 {% block content %}
-    <h2>Teacher Dashboard</h2>
-    <p>Welcome, Teacher {{ user.username }}!</p>
+<div class="container">
+    <h2 class="text-center mt-3">Welcome, {{ user.username }}!</h2>
 
-    <h3>Upload PDF</h3>
-    <form method="post" enctype="multipart/form-data" action="{% url 'upload_pdf' %}">
-        {% csrf_token %}
-        {{ pdf_upload_form.as_p }}
-        <button type="submit">Upload PDF</button>
-    </form>
+    <!-- Create New Exam Section -->
+    <div class="card p-4 mt-4">
+        <h3>Create New Exam</h3>
+        <form method="post" action="{% url 'create_exam' %}" enctype="multipart/form-data">
+            {% csrf_token %}
+            
+            <!-- Exam Title & PDF Upload -->
+            <div class="mb-3">
+                <label for="id_title" class="form-label">Exam Title</label>
+                <input type="text" class="form-control" id="id_title" name="title" required>
+            </div>
 
-    <h3>Uploaded PDFs</h3>
-    <ul>
-        {% for pdf in uploaded_pdfs %}
-            <li>
-                {{ pdf.title }} - <a href="{% url 'generate_questions_from_pdf' pdf.id %}">Generate Questions</a>
-            </li>
-        {% endfor %}
-    </ul>
+            <div class="mb-3">
+                <label for="id_pdf" class="form-label">Upload PDF (Optional)</label>
+                <input type="file" class="form-control" id="id_pdf" name="pdf_document">
+            </div>
 
-    <h3>Create New Exam</h3>
-    <form method="post" action="{% url 'create_exam' %}">
-        {% csrf_token %}
-        {{ exam_creation_form.as_p }}
-        <button type="submit">Create Exam</button>
-    </form>
+            <!-- Number of Questions & Answer Options Side by Side -->
+            <div class="row mb-3">
+                <div class="col-md-6">
+                    <label for="id_num_questions" class="form-label">Number of Questions</label>
+                    <input type="number" class="form-control" id="id_num_questions" name="num_questions" value="3" min="1" required>
+                </div>
+                <div class="col-md-6">
+                    <label for="id_num_options" class="form-label">Number of Answer Options</label>
+                    <input type="number" class="form-control" id="id_num_options" name="num_options" value="4" min="2" required>
+                </div>
+            </div>
 
-    <h3>Exams</h3>
-    <ul>
-        {% for exam in exams %}
-            <li>{{ exam.title }} - {{ exam.description }}</li>
-        {% endfor %}
-    </ul>
+            <!-- Topic Prompt (Smaller Box) -->
+            <div class="mb-3">
+                <label for="id_topic_prompt" class="form-label">Topic Prompt (Optional)</label>
+                <input type="text" class="form-control" id="id_topic_prompt" name="topic_prompt">
+            </div>
 
+            <!-- Description (Smaller Box) -->
+            <div class="mb-3">
+                <label for="id_description" class="form-label">Description</label>
+                <textarea class="form-control" id="id_description" name="description" rows="2" required></textarea>
+            </div>
+
+            <button type="submit" class="btn btn-primary">Create Exam</button>
+        </form>
+    </div>
+
+    <!-- Your Exams Section (Below Create Exam) -->
+    <div class="card p-4 mt-4">
+        <h3>Your Exams</h3>
+        <ul class="list-group">
+            {% for exam in exams %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <a href="{% url 'view_exam' exam.id %}">{{ exam.title }}</a>
+                    <form method="post" action="{% url 'delete_exam' exam.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+    <!-- Student Responses Section (Brought Back) -->
+    <div class="card p-4 mt-4">
+        <h3>Student Responses</h3>
+        <ul class="list-group">
+            {% for response in student_responses_list %}
+                <li class="list-group-item d-flex justify-content-between align-items-center">
+                    <a href="{% url 'student_exam_responses' response.student.id response.exam.id %}">
+                        {{ response.student.username }} - {{ response.exam.title }}
+                    </a>
+                    <form method="post" action="{% url 'delete_student_response' response.student.id response.exam.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="btn btn-warning btn-sm">Delete Response</button>
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+    </div>
+
+</div>
 {% endblock %}
