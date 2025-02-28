@@ -1,0 +1,25 @@
+{% extends 'base.html' %}
+
+{% block content %}
+<h2>Responses for {{ student.username }} - {{ exam.title }}</h2>
+
+<ul>
+    {% for response in responses %}
+        <li>
+            <strong>{{ response.question.text }}</strong><br>
+            <ol type="a">
+                {% for choice in response.question.answer_choices.all %}
+                    <li 
+                        {% if choice.is_correct %} style="color: green; font-weight: bold;" {% endif %}
+                        {% if choice == response.selected_choice and not choice.is_correct %} style="color: red; font-weight: bold;" {% endif %}
+                    >
+                        {{ choice.text }}
+                    </li>
+                {% endfor %}
+            </ol>
+        </li>
+    {% endfor %}
+</ul>
+
+<a href="{% url 'teacher_dashboard' %}">Back to Dashboard</a>
+{% endblock %}

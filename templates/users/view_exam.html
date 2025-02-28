@@ -1,0 +1,28 @@
+{% extends 'base.html' %}
+
+{% block title %}{{ exam.title }}{% endblock %}
+
+{% block content %}
+<div class="container">
+    <h2 class="text-center mt-3">{{ exam.title }}</h2>
+    <p class="text-muted">{{ exam.description }}</p>
+
+    <div class="card p-3 mt-3">
+        <h3>Questions</h3>
+        {% for question in questions %}
+            <div class="mb-3">
+                <h5>{{ forloop.counter }}. {{ question.text }}</h5>
+                <ul>
+                    {% for choice in question.answer_choices.all %}
+                        <li {% if choice.is_correct %}style="color: green; font-weight: bold;"{% endif %}>
+                            {{ choice.text }}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% empty %}
+            <p>No questions available for this exam.</p>
+        {% endfor %}
+    </div>
+</div>
+{% endblock %}
