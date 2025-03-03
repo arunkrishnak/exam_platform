@@ -1,25 +1,40 @@
 {% extends 'base.html' %}
 
+{% block title %}Responses for {{ student.username }} - {{ exam.title }}{% endblock %}
+
 {% block content %}
-<h2>Responses for {{ student.username }} - {{ exam.title }}</h2>
+<div class="container">
+    <h2 class="text-center mt-3">Responses for {{ student.username }} - {{ exam.title }}</h2>
 
-<ul>
-    {% for response in responses %}
-        <li>
-            <strong>{{ response.question.text }}</strong><br>
-            <ol type="a">
-                {% for choice in response.question.answer_choices.all %}
-                    <li 
-                        {% if choice.is_correct %} style="color: green; font-weight: bold;" {% endif %}
-                        {% if choice == response.selected_choice and not choice.is_correct %} style="color: red; font-weight: bold;" {% endif %}
-                    >
-                        {{ choice.text }}
-                    </li>
-                {% endfor %}
-            </ol>
-        </li>
-    {% endfor %}
-</ul>
+    <div class="card p-3 mt-3">
+        <h3>Questions & Responses</h3>
+        {% for response in responses %}
+            <div class="mb-3">
+                <h5>{{ forloop.counter }}. {{ response.question.text }}</h5>
+                <ul>
+                    {% for choice in response.question.answer_choices.all %}
+                        <li 
+                            {% if choice == response.selected_choice %}
+                                {% if choice.is_correct %}
+                                    style="color: green; font-weight: bold;"
+                                {% else %}
+                                    style="color: red; font-weight: bold;"
+                                {% endif %}
+                            {% endif %}
+                        >
+                            {{ choice.text }}
+                        </li>
+                    {% endfor %}
+                </ul>
+            </div>
+        {% empty %}
+            <p>No responses found for this exam.</p>
+        {% endfor %}
+    </div>
 
-<a href="{% url 'teacher_dashboard' %}">Back to Dashboard</a>
+    <!-- Display Total Marks -->
+    <div class="card p-3 mt-3 text-center">
+        <h3>Total Marks: {{ total_marks }} / {{ responses|length }}</h3>
+    </div>
+</div>
 {% endblock %}

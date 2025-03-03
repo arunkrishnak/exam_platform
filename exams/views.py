@@ -46,6 +46,7 @@ a. Berlin
 b. Paris
 c. Rome
 d. London
+......(As many options as mentioned ie {num_options})
 Correct Answer: b
 
 Question 2: ...
@@ -72,6 +73,7 @@ a. Berlin
 b. Paris
 c. Rome
 d. London
+......(As many options as mentioned ie {num_options})
 Correct Answer: b
 
 Question 2: ...
@@ -135,15 +137,20 @@ Question 2: ...
 
 @login_required(login_url='teacher_login')
 def student_exam_responses(request, student_id, exam_id):
-    student = get_object_or_404(User, id=student_id, is_student=True)  # ✅ Now User is defined
+    student = get_object_or_404(User, id=student_id, is_student=True)
     exam = get_object_or_404(Exam, id=exam_id)
     responses = StudentResponse.objects.filter(student=student, exam=exam).select_related('question', 'selected_choice')
+
+    # Calculate total marks (each correct answer = 1 mark)
+    total_marks = sum(1 for response in responses if response.selected_choice.is_correct)
 
     return render(request, 'users/student_exam_responses.html', {
         'student': student,
         'exam': exam,
-        'responses': responses
+        'responses': responses,
+        'total_marks': total_marks  # Pass total score to the template
     })
+
 
 @login_required(login_url='teacher_login')
 def teacher_dashboard_view(request):
