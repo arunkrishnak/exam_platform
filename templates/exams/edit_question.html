@@ -1,0 +1,20 @@
+{% extends 'base.html' %}
+{% block title %}Edit Question{% endblock %}
+{% block content %}
+<div class="container">
+    <h2>Edit Question</h2>
+    <form method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <h3>Answer Choices</h3>
+        {{ formset.management_form }}
+        {% for subform in formset %}
+            <div class="card p-3 mb-2">
+                {{ subform.as_p }}
+            </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+        <a href="{% url 'view_exam' exam_id=question.exam.id %}" class="btn btn-secondary">Cancel</a>
+    </form>
+</div>
+{% endblock %}
