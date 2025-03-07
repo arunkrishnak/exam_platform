@@ -11,7 +11,10 @@
         <h3>Questions</h3>
         {% for question in questions %}
             <div class="mb-3">
-                <h5>{{ forloop.counter }}. {{ question.text }}</h5>
+                <h5>
+                    {{ forloop.counter }}. {{ question.text }}
+                    <small><a href="{% url 'edit_question' question.id %}">Edit</a></small>
+                </h5>
                 <ul>
                     {% for choice in question.answer_choices.all %}
                         <li {% if choice.is_correct %}style="color: green; font-weight: bold;"{% endif %}>

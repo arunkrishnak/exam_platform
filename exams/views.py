@@ -10,7 +10,7 @@ from .models import StudentResponse  # Import the new model
 import random
 import json
 import re
-
+from django.forms import modelform_factory
 
 client = Client()
 
@@ -349,8 +349,28 @@ def take_exam(request, exam_id):
 
     return render(request, 'exams/take_exam.html', {'exam': exam, 'prepared_questions': prepared_questions})
 
-
-
+@login_required(login_url='teacher_login')
+def edit_question(request, question_id):
+    question = get_object_or_404(Question, id=question_id, exam__teacher=request.user)
+    QuestionForm = modelform_factory(Question, fields=['text'])
+    
+    if request.method == 'POST':
+        form = QuestionForm(request.POST, instance=question)
+        formset = AnswerChoiceFormSet(request.POST, instance=question)
+        if form.is_valid() and formset.is_valid():
+            form.save()
+            formset.save()
+            messages.success(request, "Question updated successfully.")
+            return redirect('view_exam', exam_id=question.exam.id)
+    else:
+        form = QuestionForm(instance=question)
+        formset = AnswerChoiceFormSet(instance=question)
+    
+    return render(request, 'exams/edit_question.html', {
+        'question': question,
+        'form': form,
+        'formset': formset,
+    })
 
 def home(request):
     return render(request, 'home.html')
