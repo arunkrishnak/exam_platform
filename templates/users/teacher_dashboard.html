@@ -4,54 +4,68 @@
 
 {% block content %}
 <div class="container">
+
     <h2 class="text-center mt-3">Welcome, {{ user.username }}!</h2>
 
     <!-- Create New Exam Section -->
     <div class="card p-4 mt-4">
         <h3>Create New Exam</h3>
-        <form method="post" action="{% url 'create_exam' %}" enctype="multipart/form-data">
+        <form method="post" enctype="multipart/form-data">
             {% csrf_token %}
-            
-            <!-- Exam Title & PDF Upload -->
+
+            <!-- Exam Title -->
             <div class="mb-3">
                 <label for="id_title" class="form-label">Exam Title</label>
-                <input type="text" class="form-control" id="id_title" name="title" required>
-            </div>
-
-            <div class="mb-3">
-                <label for="id_pdf" class="form-label">Upload PDF (Optional)</label>
-                <input type="file" class="form-control" id="id_pdf" name="pdf_document">
-            </div>
-
-            <!-- Number of Questions & Answer Options Side by Side -->
-            <div class="row mb-3">
-                <div class="col-md-6">
-                    <label for="id_num_questions" class="form-label">Number of Questions</label>
-                    <input type="number" class="form-control" id="id_num_questions" name="num_questions" value="3" min="1" required>
-                </div>
-                <div class="col-md-6">
-                    <label for="id_num_options" class="form-label">Number of Answer Options</label>
-                    <input type="number" class="form-control" id="id_num_options" name="num_options" value="4" min="2" required>
-                </div>
-            </div>
-
-            <!-- Topic Prompt (Smaller Box) -->
-            <div class="mb-3">
-                <label for="id_topic_prompt" class="form-label">Topic Prompt (Optional)</label>
-                <input type="text" class="form-control" id="id_topic_prompt" name="topic_prompt">
+                {{ exam_creation_form.title }}
             </div>
 
             <!-- Description (Smaller Box) -->
             <div class="mb-3">
                 <label for="id_description" class="form-label">Description</label>
-                <textarea class="form-control" id="id_description" name="description" rows="2" required></textarea>
+                {{ exam_creation_form.description }}
+                <script>
+                    document.getElementById('id_description').setAttribute('rows', '2');
+                </script>
+            </div>
+
+            <!-- PDF Upload -->
+            <div class="mb-3">
+                <label for="id_pdf_document" class="form-label">Upload PDF (Optional)</label>
+                {{ exam_creation_form.pdf_document }}
+            </div>
+
+            <!-- Skills (Manual Entry) -->
+            <div class="mb-3">
+                <label for="id_skills" class="form-label">Skills (Comma-separated)</label>
+                {{ exam_creation_form.skills }}
+            </div>
+
+            <!-- Number of Questions Per Level -->
+            <div class="mb-3">
+                <label for="id_num_questions_per_level" class="form-label">Number of Questions per Level</label>
+                {{ exam_creation_form.num_questions_per_level }}
+            </div>
+
+            <!-- Number of Answer Options -->
+            <div class="mb-3">
+                <label for="id_num_options" class="form-label">Number of Answer Options</label>
+                {{ exam_creation_form.num_options }}
+            </div>
+
+            <!-- Topic Prompt (Smaller Box) -->
+            <div class="mb-3">
+                <label for="id_topic_prompt" class="form-label">Topic Prompt (Optional)</label>
+                {{ exam_creation_form.topic_prompt }}
+                <script>
+                    document.getElementById('id_topic_prompt').setAttribute('rows', '2');
+                </script>
             </div>
 
             <button type="submit" class="btn btn-primary">Create Exam</button>
         </form>
     </div>
 
-    <!-- Your Exams Section (Below Create Exam) -->
+    <!-- Your Exams Section -->
     <div class="card p-4 mt-4">
         <h3>Your Exams</h3>
         <ul class="list-group">
@@ -63,11 +77,13 @@
                         <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                     </form>
                 </li>
+            {% empty %}
+                <li class="list-group-item">No exams available. Create one above!</li>
             {% endfor %}
         </ul>
     </div>
 
-    <!-- Student Responses Section (Brought Back) -->
+    <!-- Student Responses Section -->
     <div class="card p-4 mt-4">
         <h3>Student Responses</h3>
         <ul class="list-group">
@@ -81,6 +97,8 @@
                         <button type="submit" class="btn btn-warning btn-sm">Delete Response</button>
                     </form>
                 </li>
+            {% empty %}
+                <li class="list-group-item">No student responses available.</li>
             {% endfor %}
         </ul>
     </div>

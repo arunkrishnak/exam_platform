@@ -26,11 +26,14 @@ class Exam(models.Model):
     teacher = models.ForeignKey(User, on_delete=models.CASCADE, limit_choices_to={'is_teacher': True})
     title = models.CharField(max_length=255)
     description = models.TextField(blank=True)
-    pdf_document = models.ForeignKey(PDFDocument, null=True, blank=True, on_delete=models.SET_NULL)
+    pdf_document = models.FileField(upload_to='pdfs/', null=True, blank=True)
+    skills = models.JSONField(default=list)  # Store skills as a list
     created_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
         return self.title
+
+
 
 class Question(models.Model):
     exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name='questions')

@@ -8,15 +8,18 @@ class PDFUploadForm(forms.ModelForm): # Keep PDF upload form for now
         fields = ['title', 'pdf_file']
 
 class ExamCreationForm(forms.ModelForm):
-    pdf_document = forms.FileField(required=False, label="Upload PDF (Optional)") # PDF upload field in ExamForm
+    pdf_document = forms.FileField(required=False, label="Upload PDF (Optional)")
     num_options = forms.IntegerField(min_value=2, max_value=5, initial=4, label="Number of Answer Options per Question")
-    topic_prompt = forms.CharField(widget=forms.Textarea, required=False, label="Topic Prompt for Question Generation (Optional)")
-    num_questions = forms.IntegerField(min_value=1, max_value=10, initial=3, label="Number of Questions to Generate from PDF") # New field for number of questions
-
+    topic_prompt = forms.CharField(widget=forms.Textarea, required=False, label="Topic Prompt (Optional)")
+    num_questions_per_level = forms.IntegerField(min_value=1, max_value=10, initial=3, label="Number of Questions per Level")
+    skills = forms.CharField(required=True, label="Skills (comma-separated)")
 
     class Meta:
         model = Exam
-        fields = ['title', 'description'] # Removed pdf_document from here - now a separate field
+        fields = ['title', 'description']
+
+
+
 
 # Base form for AnswerChoice - will be used in formset
 class AnswerChoiceForm(forms.ModelForm):

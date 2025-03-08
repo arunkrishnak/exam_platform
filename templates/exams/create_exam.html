@@ -4,7 +4,43 @@
     <h2>Create Exam</h2>
     <form method="post" enctype="multipart/form-data">
         {% csrf_token %}
-        {{ exam_form.as_p }}
-        <button type="submit">Create Exam</button>
+        
+        <!-- Title -->
+        <div class="mb-3">
+            <label for="id_title" class="form-label">Exam Title</label>
+            {{ exam_form.title }}
+        </div>
+
+        <!-- Description -->
+        <div class="mb-3">
+            <label for="id_description" class="form-label">Description</label>
+            {{ exam_form.description }}
+        </div>
+
+        <!-- PDF Upload -->
+        <div class="mb-3">
+            <label for="id_pdf_document" class="form-label">Upload PDF (Optional)</label>
+            {{ exam_form.pdf_document }}
+        </div>
+
+        <!-- Number of Questions Per Level -->
+        <div class="mb-3">
+            <label for="id_num_questions_per_level" class="form-label">Number of Questions per Level</label>
+            {{ exam_form.num_questions_per_level }}
+        </div>
+
+        <!-- Number of Options -->
+        <div class="mb-3">
+            <label for="id_num_options" class="form-label">Number of Answer Options per Question</label>
+            {{ exam_form.num_options }}
+        </div>
+
+        <!-- Topic Prompt -->
+        <div class="mb-3">
+            <label for="id_topic_prompt" class="form-label">Topic Prompt (Optional)</label>
+            {{ exam_form.topic_prompt }}
+        </div>
+
+        <button type="submit" class="btn btn-primary">Create Exam</button>
     </form>
 {% endblock %}

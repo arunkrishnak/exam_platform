@@ -21,6 +21,15 @@ def extract_text_from_pdf(pdf_file):
         text += page.extract_text()
     return text
 
+def extract_skills_from_text(text):
+    """Extract skills using simple keyword matching or AI-based extraction"""
+    skills = set()
+    possible_skills = ["Java", "Python", "MySQL", "JavaScript", "C++", "Django", "HTML", "CSS"]  # Extendable skill list
+    for skill in possible_skills:
+        if skill.lower() in text.lower():
+            skills.add(skill)
+    return list(skills)
+
 def generate_questions_with_gpt(text, num_questions=3, num_options=4, topic_prompt=""):
     try:
         # Create the prompt based on whether topic_prompt is provided.
@@ -30,6 +39,11 @@ def generate_questions_with_gpt(text, num_questions=3, num_options=4, topic_prom
 {text}
 
 **Formatting Requirements:**
+
+1. Ensure each question is unique and does not repeat concepts.
+2. Provide {num_options} distinct answer options per question. 
+3. Mark only ONE correct answer clearly.
+4. Include real-world examples where appropriate for diversity.
 
 For each question, please follow this structure EXACTLY:
 
@@ -160,21 +174,68 @@ def teacher_dashboard_view(request):
     exams = Exam.objects.filter(teacher=request.user)
     student_responses = StudentResponse.objects.filter(exam__in=exams).select_related('student', 'exam')
 
-    # Use a set to avoid duplicate student-exam pairs
-    student_exam_pairs = set()
-    for response in student_responses:
-        student_exam_pairs.add((response.student, response.exam))
+    if request.method == 'POST':
+        exam_form = ExamCreationForm(request.POST, request.FILES)
+        
+        if exam_form.is_valid():
+            exam = exam_form.save(commit=False)
+            exam.teacher = request.user
+            pdf_file_uploaded = request.FILES.get('pdf_document')
 
-    # Convert set into a list of dictionaries for the template
-    student_responses_list = [{'student': student, 'exam': exam} for student, exam in student_exam_pairs]
+            # Capture skills from user input
+            skills_input = exam_form.cleaned_data['skills']
+            skills = [skill.strip() for skill in skills_input.split(',') if skill.strip()]
+            exam.skills = skills
+            exam.save()
 
-    exam_creation_form = ExamCreationForm()
+            # Generate questions
+            num_options = exam_form.cleaned_data['num_options']
+            num_questions_per_level = exam_form.cleaned_data['num_questions_per_level']
+
+            # Generate questions for each skill and level
+            text = extract_text_from_pdf(pdf_file_uploaded) if pdf_file_uploaded else ""
+            unique_questions = set()
+            for skill in skills:
+                for level in ["Easy", "Medium", "Hard"]:
+                    print(f"🔍 Generating questions for {skill} - {level}")
+
+                    generated_questions = generate_questions_with_gpt(
+                        text=text,
+                        num_questions=num_questions_per_level,
+                        num_options=num_options,
+                        topic_prompt=f"{skill} - {level}"
+                    )
+
+                    for q_data in generated_questions:
+                        # Ensure question uniqueness across all skills and levels
+                        if q_data.get('text') not in unique_questions:
+                            unique_questions.add(q_data['text'])
+                            question = Question.objects.create(exam=exam, text=q_data['text'])
+
+                            for choice_data in q_data.get('answer_choices', []):
+                                AnswerChoice.objects.create(
+                                    question=question,
+                                    text=choice_data['text'],
+                                    is_correct=choice_data['is_correct']
+                                )
+
+            messages.success(request, "Exam created with questions!")
+            return redirect('teacher_dashboard')
+        else:
+            print("❌ Form errors:", exam_form.errors)
+
+    else:
+        exam_form = ExamCreationForm()
+
+    student_exam_pairs = set((resp.student, resp.exam) for resp in student_responses)
+    student_responses_list = [{'student': s, 'exam': e} for s, e in student_exam_pairs]
 
     return render(request, 'users/teacher_dashboard.html', {
         'exams': exams,
         'student_responses_list': student_responses_list,
-        'exam_creation_form': exam_creation_form
+        'exam_creation_form': exam_form,
     })
+
 
 
 
@@ -238,45 +299,46 @@ def upload_pdf(request): # Keep PDF upload independent for now - might remove la
 
 @login_required(login_url='teacher_login')
 def create_exam(request):
-    pdf_upload_form = PDFUploadForm() # For PDF upload form on exam creation page (you might not need this anymore)
     if request.method == 'POST':
-        exam_form = ExamCreationForm(request.POST, request.FILES) # Include request.FILES for PDF upload in ExamCreationForm
+        exam_form = ExamCreationForm(request.POST, request.FILES)
         num_options = int(request.POST.get('num_options', 4))
+        num_questions_per_level = int(request.POST.get('num_questions_per_level', 3))
         topic_prompt = request.POST.get('topic_prompt', '')
-        num_questions = int(request.POST.get('num_questions', 3)) # Get number of questions from form, default to 3
-
 
         if exam_form.is_valid():
             exam = exam_form.save(commit=False)
             exam.teacher = request.user
-
             pdf_file_uploaded = request.FILES.get('pdf_document')
+
             if pdf_file_uploaded:
                 text = extract_text_from_pdf(pdf_file_uploaded)
-                generated_questions_data = generate_questions_with_gpt(text, num_questions=num_questions, num_options=num_options, topic_prompt=topic_prompt)# Pass num_questions
+                identified_skills = extract_skills_from_text(text)
+                exam.skills = identified_skills
+                exam.save()
 
+                for skill in identified_skills:
+                    for level in ["Easy", "Medium", "Hard"]:
+                        generated_questions = generate_questions_with_gpt(
+                            text=text, num_questions=num_questions_per_level, num_options=num_options, topic_prompt=f"{skill} - {level}"
+                        )
+
+                        for q_data in generated_questions:
+                            if q_data.get('text'):
+                                question = Question.objects.create(exam=exam, text=q_data['text'])
+                                for choice in q_data.get('answer_choices', []):
+                                    AnswerChoice.objects.create(question=question, text=choice['text'], is_correct=choice['is_correct'])
+
+                messages.success(request, 'Exam created with questions from detected skills!')
+            else:
                 exam.save()
-                for q_data in generated_questions_data:
-                    if q_data and q_data.get('text'):
-                        question = Question.objects.create(exam=exam, text=q_data['text'])
-                        for choice_data in q_data.get('answer_choices', []):
-                            AnswerChoice.objects.create(
-                                question=question,
-                                text=choice_data['text'],
-                                is_correct=choice_data['is_correct']
-                            )
-                messages.success(request, 'Exam created with questions generated from PDF!')
-            else: # If no PDF, just save exam without questions
-                exam.save()
-                messages.success(request, 'Exam created successfully (no PDF questions generated).')
+                messages.success(request, 'Exam created successfully without auto-generated questions.')
 
             return redirect('teacher_dashboard')
-        else:
-             messages.error(request, 'Exam creation failed. Please check the form.')
+
     else:
         exam_form = ExamCreationForm()
 
-    return render(request, 'exams/create_exam.html', {'exam_form': exam_form, 'pdf_upload_form': pdf_upload_form}) # Keep pdf_upload_form for now
+    return render(request, 'exams/create_exam.html', {'exam_form': exam_form})
 
 @login_required(login_url='teacher_login')
 def delete_all_pdfs(request):
