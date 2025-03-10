@@ -32,4 +32,4 @@ AnswerChoiceFormSet = inlineformset_factory(Question, AnswerChoice, form=AnswerC
 class QuestionCreationForm(forms.ModelForm): # We might not use this directly anymore for MCQ creation
     class Meta:
         model = Question
-        fields = ['text', 'question_type']
+        fields = ['text', 'difficulty']

@@ -36,12 +36,13 @@ class Exam(models.Model):
 
 
 class Question(models.Model):
-    exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name='questions')
+    exam = models.ForeignKey(Exam, on_delete=models.CASCADE, related_name="questions")
     text = models.TextField()
-    question_type = models.CharField(max_length=20, choices=[('MCQ', 'Multiple Choice Question')], default='MCQ') # Question type field
+    difficulty = models.CharField(max_length=10, choices=[('Easy', 'Easy'), ('Medium', 'Medium'), ('Hard', 'Hard')], default='Medium')
 
     def __str__(self):
-        return self.text[:50] + "..."
+        return self.text
+
 
 class AnswerChoice(models.Model):
     question = models.ForeignKey(Question, on_delete=models.CASCADE, related_name='answer_choices')

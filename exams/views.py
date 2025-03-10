@@ -195,29 +195,44 @@ def teacher_dashboard_view(request):
             # Generate questions for each skill and level
             text = extract_text_from_pdf(pdf_file_uploaded) if pdf_file_uploaded else ""
             unique_questions = set()
+
             for skill in skills:
                 for level in ["Easy", "Medium", "Hard"]:
                     print(f"🔍 Generating questions for {skill} - {level}")
+                    
+                    # Keep generating until we have enough unique questions
+                    while len([q for q in unique_questions if q[1] == level and q[2] == skill]) < num_questions_per_level:
+                        generated_questions = generate_questions_with_gpt(
+                            text=text,
+                            num_questions=num_questions_per_level,
+                            num_options=num_options,
+                            topic_prompt=f"{skill} - {level}"
+                        )
 
-                    generated_questions = generate_questions_with_gpt(
-                        text=text,
-                        num_questions=num_questions_per_level,
-                        num_options=num_options,
-                        topic_prompt=f"{skill} - {level}"
-                    )
+                        for q_data in generated_questions:
+                            # Ensure question uniqueness across all skills and levels
+                            question_key = (q_data['text'], level, skill)
+                            
+                            if question_key not in unique_questions:
+                                unique_questions.add(question_key)
 
-                    for q_data in generated_questions:
-                        # Ensure question uniqueness across all skills and levels
-                        if q_data.get('text') not in unique_questions:
-                            unique_questions.add(q_data['text'])
-                            question = Question.objects.create(exam=exam, text=q_data['text'])
-
-                            for choice_data in q_data.get('answer_choices', []):
-                                AnswerChoice.objects.create(
-                                    question=question,
-                                    text=choice_data['text'],
-                                    is_correct=choice_data['is_correct']
+                                # Save the question with difficulty and skill reference
+                                question = Question.objects.create(
+                                    exam=exam,
+                                    text=q_data['text'],
+                                    difficulty=level
                                 )
+
+                                for choice_data in q_data.get('answer_choices', []):
+                                    AnswerChoice.objects.create(
+                                        question=question,
+                                        text=choice_data['text'],
+                                        is_correct=choice_data['is_correct']
+                                    )
+
+                                print(f"✅ Saved Question: '{question.text}' (Difficulty: {question.difficulty})")
+
+
 
             messages.success(request, "Exam created with questions!")
             return redirect('teacher_dashboard')
