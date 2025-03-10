@@ -34,10 +34,10 @@ def generate_questions_with_gpt(text, num_questions=3, num_options=4, topic_prom
     try:
         # Create the prompt based on whether topic_prompt is provided.
         if topic_prompt:
-            prompt_text = f"""Generate {num_questions} multiple choice questions on the topic of '{topic_prompt}' from the following text:
+            prompt_text = f"""Generate {num_questions} multiple choice questions from the following text:
 
 {text}
-
+{topic_prompt}
 **Formatting Requirements:**
 
 1. Ensure each question is unique and does not repeat concepts.
@@ -163,6 +163,7 @@ def student_exam_responses(request, student_id, exam_id):
     medium_total = 0
     hard_total = 0
 
+    # Calculate correct responses and total questions by difficulty
     for response in responses:
         difficulty = response.question.difficulty
         if difficulty.lower() == 'easy':
@@ -183,14 +184,23 @@ def student_exam_responses(request, student_id, exam_id):
 
     overall_total = easy_total + medium_total + hard_total
 
-    # Determine level classification based on 80% threshold
-    level = "Needs Improvement"
-    if hard_total and (hard_marks / hard_total) >= 0.8:
-        level = "Advanced"
-    elif medium_total and (medium_marks / medium_total) >= 0.8:
-        level = "Intermediate"
-    elif easy_total and (easy_marks / easy_total) >= 0.8:
-        level = "Beginner"
+    # Ensure division by zero is handled safely
+    def is_passed(marks, total):
+        return total > 0 and (marks / total) >= 0.8
+
+    # Determine level classification (Progressive Evaluation)
+    if not is_passed(easy_marks, easy_total):
+        level = "Needs Improvement"
+    elif is_passed(easy_marks, easy_total):
+        if not is_passed(medium_marks, medium_total):
+            level = "Beginner"
+        elif is_passed(medium_marks, medium_total):
+            if is_passed(hard_marks, hard_total):
+                level = "Advanced"
+            else:
+                level = "Intermediate"
+    else:
+        level = "Needs Improvement"
 
     return render(request, 'users/student_exam_responses.html', {
         'student': student,
@@ -206,6 +216,7 @@ def student_exam_responses(request, student_id, exam_id):
         'hard_total': hard_total,
         'level': level,
     })
+
 
 
 @login_required(login_url='teacher_login')
