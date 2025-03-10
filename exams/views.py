@@ -155,14 +155,56 @@ def student_exam_responses(request, student_id, exam_id):
     exam = get_object_or_404(Exam, id=exam_id)
     responses = StudentResponse.objects.filter(student=student, exam=exam).select_related('question', 'selected_choice')
 
-    # Calculate total marks (each correct answer = 1 mark)
-    total_marks = sum(1 for response in responses if response.selected_choice.is_correct)
+    total_marks = 0
+    easy_marks = 0
+    medium_marks = 0
+    hard_marks = 0
+    easy_total = 0
+    medium_total = 0
+    hard_total = 0
+
+    for response in responses:
+        difficulty = response.question.difficulty
+        if difficulty.lower() == 'easy':
+            easy_total += 1
+            if response.selected_choice and response.selected_choice.is_correct:
+                easy_marks += 1
+                total_marks += 1
+        elif difficulty.lower() == 'medium':
+            medium_total += 1
+            if response.selected_choice and response.selected_choice.is_correct:
+                medium_marks += 1
+                total_marks += 1
+        elif difficulty.lower() == 'hard':
+            hard_total += 1
+            if response.selected_choice and response.selected_choice.is_correct:
+                hard_marks += 1
+                total_marks += 1
+
+    overall_total = easy_total + medium_total + hard_total
+
+    # Determine level classification based on 80% threshold
+    level = "Needs Improvement"
+    if hard_total and (hard_marks / hard_total) >= 0.8:
+        level = "Advanced"
+    elif medium_total and (medium_marks / medium_total) >= 0.8:
+        level = "Intermediate"
+    elif easy_total and (easy_marks / easy_total) >= 0.8:
+        level = "Beginner"
 
     return render(request, 'users/student_exam_responses.html', {
         'student': student,
         'exam': exam,
         'responses': responses,
-        'total_marks': total_marks  # Pass total score to the template
+        'total_marks': total_marks,
+        'overall_total': overall_total,
+        'easy_marks': easy_marks,
+        'easy_total': easy_total,
+        'medium_marks': medium_marks,
+        'medium_total': medium_total,
+        'hard_marks': hard_marks,
+        'hard_total': hard_total,
+        'level': level,
     })
 
 
@@ -339,9 +381,17 @@ def create_exam(request):
 
                         for q_data in generated_questions:
                             if q_data.get('text'):
-                                question = Question.objects.create(exam=exam, text=q_data['text'])
+                                question = Question.objects.create(
+                                    exam=exam,
+                                    text=q_data['text'],
+                                    difficulty=level  # Ensure the question difficulty is saved
+                                )
                                 for choice in q_data.get('answer_choices', []):
-                                    AnswerChoice.objects.create(question=question, text=choice['text'], is_correct=choice['is_correct'])
+                                    AnswerChoice.objects.create(
+                                        question=question,
+                                        text=choice['text'],
+                                        is_correct=choice['is_correct']
+                                    )
 
                 messages.success(request, 'Exam created with questions from detected skills!')
             else:

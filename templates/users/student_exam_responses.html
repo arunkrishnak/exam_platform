@@ -10,7 +10,7 @@
         <h3>Questions & Responses</h3>
         {% for response in responses %}
             <div class="mb-3">
-                <h5>{{ forloop.counter }}. {{ response.question.text }}</h5>
+                <h5>{{ forloop.counter }}. {{ response.question.text }} <small>({{ response.question.difficulty }})</small></h5>
                 <ul>
                     {% for choice in response.question.answer_choices.all %}
                         <li 
@@ -32,9 +32,14 @@
         {% endfor %}
     </div>
 
-    <!-- Display Total Marks -->
+    <!-- Display Total and Breakdown Marks -->
     <div class="card p-3 mt-3 text-center">
-        <h3>Total Marks: {{ total_marks }} / {{ responses|length }}</h3>
+        <h3>Total Marks: {{ total_marks }} / {{ overall_total }}</h3>
+        <p>Easy: {{ easy_marks }} / {{ easy_total }}</p>
+        <p>Medium: {{ medium_marks }} / {{ medium_total }}</p>
+        <p>Hard: {{ hard_marks }} / {{ hard_total }}</p>
+        <hr>
+        <h4>Level of Student: {{ level }}</h4>
     </div>
 </div>
 {% endblock %}
