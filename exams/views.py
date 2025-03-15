@@ -102,45 +102,53 @@ Question 2: ...
         gpt_response = response.choices[0].message.content
 
         # Use regex to split output by lines that begin with "Question <number>:"
-        question_blocks = re.split(r'(?=Question\s+\d+:)', gpt_response.strip())
+        # Improved splitting with better handling of empty questions
+        question_blocks = [block.strip() for block in re.split(r'(?=Question\s+\d+:)', gpt_response.strip()) if block.strip()]
+
         questions_data = []
 
         for block in question_blocks:
-            block = block.strip()
-            if not block:
-                continue
             lines = block.splitlines()
 
-            # Process the first line to extract question text (removing the "Question X:" prefix)
-            question_line = lines[0]
+            # Ensure the block starts with a valid question
+            if not lines or not lines[0].startswith("Question"):
+                continue
+
+            # Extract the question text safely
+            question_line = lines[0].strip()
             question_text = re.sub(r'^Question\s+\d+:\s*', '', question_line).strip()
+
+            # Ensure valid question text is present
+            if not question_text:
+                continue
 
             answer_choices = []
             correct_answer_index = None
 
-            # Process the remaining lines for answer choices and the correct answer
+            # Process answer choices and find the correct one
             for line in lines[1:]:
                 line = line.strip()
-                if not line:
-                    continue
-                # Check if the line indicates the correct answer
+
                 if line.lower().startswith('correct answer:'):
                     correct_letter = line.split(':', 1)[-1].strip().lower()
                     correct_answer_index = ord(correct_letter) - ord('a')
                 else:
-                    # Look for lines that start with a letter followed by a period and a space.
-                    match = re.match(r'^([a-z])\.\s*(.+)$', line)  # Ensure it captures all answer choices dynamically
+                    match = re.match(r'^([a-z])\.\s*(.+)$', line)
                     if match:
-                        # Even if a choice text accidentally includes "Question" in it, we only consider the letter and text.
                         choice_text = match.group(2).strip()
                         answer_choices.append({'text': choice_text, 'is_correct': False})
 
-            # Mark the correct answer if found.
+            # Validate and mark the correct answer
             if correct_answer_index is not None and 0 <= correct_answer_index < len(answer_choices):
                 answer_choices[correct_answer_index]['is_correct'] = True
 
-            questions_data.append({'text': question_text, 'answer_choices': answer_choices})
-            questions_data = questions_data[:num_questions]  # Ensure we only return the required number of questions.
+            # Ensure the question has valid answer choices
+            if question_text and len(answer_choices) == num_options:
+                questions_data.append({'text': question_text, 'answer_choices': answer_choices})
+
+        # Ensure we only return the required number of questions
+        questions_data = questions_data[:num_questions]
+
 
 
         return questions_data
@@ -155,67 +163,134 @@ def student_exam_responses(request, student_id, exam_id):
     exam = get_object_or_404(Exam, id=exam_id)
     responses = StudentResponse.objects.filter(student=student, exam=exam).select_related('question', 'selected_choice')
 
-    total_marks = 0
-    easy_marks = 0
-    medium_marks = 0
-    hard_marks = 0
-    easy_total = 0
-    medium_total = 0
-    hard_total = 0
+    # Initialize topic-wise tracking and overall totals
+    topic_data = {}
+    total_marks_obtained = 0
+    total_possible_marks = 0
 
-    # Calculate correct responses and total questions by difficulty
-    for response in responses:
-        difficulty = response.question.difficulty
-        if difficulty.lower() == 'easy':
-            easy_total += 1
-            if response.selected_choice and response.selected_choice.is_correct:
-                easy_marks += 1
-                total_marks += 1
-        elif difficulty.lower() == 'medium':
-            medium_total += 1
-            if response.selected_choice and response.selected_choice.is_correct:
-                medium_marks += 1
-                total_marks += 1
-        elif difficulty.lower() == 'hard':
-            hard_total += 1
-            if response.selected_choice and response.selected_choice.is_correct:
-                hard_marks += 1
-                total_marks += 1
-
-    overall_total = easy_total + medium_total + hard_total
-
-    # Ensure division by zero is handled safely
+    # Helper function to check if the student passed (80% threshold)
     def is_passed(marks, total):
         return total > 0 and (marks / total) >= 0.8
 
-    # Determine level classification (Progressive Evaluation)
-    if not is_passed(easy_marks, easy_total):
-        level = "Needs Improvement"
-    elif is_passed(easy_marks, easy_total):
-        if not is_passed(medium_marks, medium_total):
-            level = "Beginner"
-        elif is_passed(medium_marks, medium_total):
-            if is_passed(hard_marks, hard_total):
-                level = "Advanced"
-            else:
-                level = "Intermediate"
-    else:
-        level = "Needs Improvement"
+    # Calculate correct responses and totals by topic and difficulty
+    for response in responses:
+        topic = response.question.topic
+        difficulty = response.question.difficulty
+
+        if topic not in topic_data:
+            topic_data[topic] = {
+                'easy_marks': 0, 'easy_total': 0,
+                'medium_marks': 0, 'medium_total': 0,
+                'hard_marks': 0, 'hard_total': 0
+            }
+
+        # Update totals and correct answers
+        if difficulty.lower() == 'easy':
+            topic_data[topic]['easy_total'] += 1
+            if response.selected_choice and response.selected_choice.is_correct:
+                topic_data[topic]['easy_marks'] += 1
+        elif difficulty.lower() == 'medium':
+            topic_data[topic]['medium_total'] += 1
+            if response.selected_choice and response.selected_choice.is_correct:
+                topic_data[topic]['medium_marks'] += 1
+        elif difficulty.lower() == 'hard':
+            topic_data[topic]['hard_total'] += 1
+            if response.selected_choice and response.selected_choice.is_correct:
+                topic_data[topic]['hard_marks'] += 1
+
+    # Determine student level for each topic and calculate total marks
+    for topic, data in topic_data.items():
+        total_marks_obtained += data['easy_marks'] + data['medium_marks'] + data['hard_marks']
+        total_possible_marks += data['easy_total'] + data['medium_total'] + data['hard_total']
+
+        # Determine the student's level based on progression
+        if not is_passed(data['easy_marks'], data['easy_total']):
+            data['level'] = "Needs Improvement"
+        elif is_passed(data['easy_marks'], data['easy_total']):
+            if not is_passed(data['medium_marks'], data['medium_total']):
+                data['level'] = "Beginner"
+            elif is_passed(data['medium_marks'], data['medium_total']):
+                if is_passed(data['hard_marks'], data['hard_total']):
+                    data['level'] = "Advanced"
+                else:
+                    data['level'] = "Intermediate"
 
     return render(request, 'users/student_exam_responses.html', {
         'student': student,
         'exam': exam,
         'responses': responses,
-        'total_marks': total_marks,
-        'overall_total': overall_total,
-        'easy_marks': easy_marks,
-        'easy_total': easy_total,
-        'medium_marks': medium_marks,
-        'medium_total': medium_total,
-        'hard_marks': hard_marks,
-        'hard_total': hard_total,
-        'level': level,
+        'topic_data': topic_data,  # Pass topic-wise data to the template
+        'total_marks_obtained': total_marks_obtained,  # Total marks obtained
+        'total_possible_marks': total_possible_marks,  # Total marks possible
     })
+    
+@login_required(login_url='teacher_login')
+def student_exam_responses(request, student_id, exam_id):
+    student = get_object_or_404(User, id=student_id, is_student=True)
+    exam = get_object_or_404(Exam, id=exam_id)
+    responses = StudentResponse.objects.filter(student=student, exam=exam).select_related('question', 'selected_choice')
+
+    # Initialize topic-wise tracking and overall totals
+    topic_data = {}
+    total_marks_obtained = 0
+    total_possible_marks = 0
+
+    # Helper function to check if the student passed (80% threshold)
+    def is_passed(marks, total):
+        return total > 0 and (marks / total) >= 0.8
+
+    # Calculate correct responses and totals by topic and difficulty
+    for response in responses:
+        topic = response.question.topic
+        difficulty = response.question.difficulty
+
+        if topic not in topic_data:
+            topic_data[topic] = {
+                'easy_marks': 0, 'easy_total': 0,
+                'medium_marks': 0, 'medium_total': 0,
+                'hard_marks': 0, 'hard_total': 0
+            }
+
+        # Update totals and correct answers
+        if difficulty.lower() == 'easy':
+            topic_data[topic]['easy_total'] += 1
+            if response.selected_choice and response.selected_choice.is_correct:
+                topic_data[topic]['easy_marks'] += 1
+        elif difficulty.lower() == 'medium':
+            topic_data[topic]['medium_total'] += 1
+            if response.selected_choice and response.selected_choice.is_correct:
+                topic_data[topic]['medium_marks'] += 1
+        elif difficulty.lower() == 'hard':
+            topic_data[topic]['hard_total'] += 1
+            if response.selected_choice and response.selected_choice.is_correct:
+                topic_data[topic]['hard_marks'] += 1
+
+    # Determine student level for each topic and calculate total marks
+    for topic, data in topic_data.items():
+        total_marks_obtained += data['easy_marks'] + data['medium_marks'] + data['hard_marks']
+        total_possible_marks += data['easy_total'] + data['medium_total'] + data['hard_total']
+
+        # Determine the student's level based on progression
+        if not is_passed(data['easy_marks'], data['easy_total']):
+            data['level'] = "Needs Improvement"
+        elif is_passed(data['easy_marks'], data['easy_total']):
+            if not is_passed(data['medium_marks'], data['medium_total']):
+                data['level'] = "Beginner"
+            elif is_passed(data['medium_marks'], data['medium_total']):
+                if is_passed(data['hard_marks'], data['hard_total']):
+                    data['level'] = "Advanced"
+                else:
+                    data['level'] = "Intermediate"
+
+    return render(request, 'users/student_exam_responses.html', {
+        'student': student,
+        'exam': exam,
+        'responses': responses,
+        'topic_data': topic_data,  # Pass topic-wise data to the template
+        'total_marks_obtained': total_marks_obtained,  # Total marks obtained
+        'total_possible_marks': total_possible_marks,  # Total marks possible
+    })
+
 
 
 
@@ -273,7 +348,8 @@ def teacher_dashboard_view(request):
                                 question = Question.objects.create(
                                     exam=exam,
                                     text=q_data['text'],
-                                    difficulty=level
+                                    difficulty=level,
+                                    topic=skill 
                                 )
 
                                 for choice_data in q_data.get('answer_choices', []):

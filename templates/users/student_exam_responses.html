@@ -6,11 +6,32 @@
 <div class="container">
     <h2 class="text-center mt-3">Responses for {{ student.username }} - {{ exam.title }}</h2>
 
+    <!-- Total Exam Marks Section -->
     <div class="card p-3 mt-3">
+        <h4>Total Exam Marks</h4>
+        <p><strong>Total Marks:</strong> {{ total_marks_obtained }} / {{ total_possible_marks }}</p>
+    </div>
+
+    <!-- Topic-wise Breakdown -->
+    {% for topic, data in topic_data.items %}
+    <div class="card p-3 mt-3">
+        <h4>{{ topic }}</h4>
+        <p><strong>Total Marks:</strong> {{ data.easy_marks|add:data.medium_marks|add:data.hard_marks }} / {{ data.easy_total|add:data.medium_total|add:data.hard_total }}</p>
+
+        <p><strong>Easy:</strong> {{ data.easy_marks }} / {{ data.easy_total }}</p>
+        <p><strong>Medium:</strong> {{ data.medium_marks }} / {{ data.medium_total }}</p>
+        <p><strong>Hard:</strong> {{ data.hard_marks }} / {{ data.hard_total }}</p>
+
+        <p><strong>Level of Student:</strong> {{ data.level }}</p>
+    </div>
+    {% endfor %}
+
+    <!-- Questions & Responses Section -->
+    <div class="card p-3 mt-4">
         <h3>Questions & Responses</h3>
         {% for response in responses %}
             <div class="mb-3">
-                <h5>{{ forloop.counter }}. {{ response.question.text }} <small>({{ response.question.difficulty }})</small></h5>
+                <h5>{{ forloop.counter }}. {{ response.question.text }}</h5>
                 <ul>
                     {% for choice in response.question.answer_choices.all %}
                         <li 
@@ -32,14 +53,5 @@
         {% endfor %}
     </div>
 
-    <!-- Display Total and Breakdown Marks -->
-    <div class="card p-3 mt-3 text-center">
-        <h3>Total Marks: {{ total_marks }} / {{ overall_total }}</h3>
-        <p>Easy: {{ easy_marks }} / {{ easy_total }}</p>
-        <p>Medium: {{ medium_marks }} / {{ medium_total }}</p>
-        <p>Hard: {{ hard_marks }} / {{ hard_total }}</p>
-        <hr>
-        <h4>Level of Student: {{ level }}</h4>
-    </div>
 </div>
 {% endblock %}
