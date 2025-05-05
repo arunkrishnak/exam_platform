@@ -1,3 +1,4 @@
+from django.utils import timezone
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
 from .forms import PDFUploadForm, ExamCreationForm, QuestionCreationForm, AnswerChoiceFormSet  # Import AnswerChoiceFormSet
@@ -12,6 +13,8 @@ import json
 import re
 from django.forms import modelform_factory
 
+from collections import defaultdict
+from django.db.models import Avg
 client = Client()
 
 def extract_text_from_pdf(pdf_file):
@@ -157,6 +160,112 @@ Question 2: ...
         print(f"GPT Error: {e}")
         return []
 
+@login_required # Assuming student login for now
+def student_performance_by_teacher(request, student_id):
+    """
+    Displays a student's exam performance history, grouped by the teacher
+    who created each exam, including detailed breakdown per exam.
+    """
+    student = get_object_or_404(User, id=student_id, is_student=True)
+
+    # Basic authorization
+    if request.user.id != student.id and not request.user.is_teacher:
+         messages.error(request, "You are not authorized to view this performance history.")
+         return redirect('student_dashboard') if request.user.is_student else redirect('home')
+
+    # Get all completed attempts for the student
+    attempts = StudentExamAttempt.objects.filter(
+        student=student,
+        score__isnull=False
+    ).select_related('exam', 'exam__teacher').order_by('exam__teacher__username', 'start_time')
+
+    # Get all relevant responses for these attempts in one query
+    attempt_exam_ids = [a.exam.id for a in attempts if a.exam]
+    all_responses = StudentResponse.objects.filter(
+        student=student,
+        exam_id__in=attempt_exam_ids
+    ).select_related('question', 'selected_choice')
+
+    # Group responses by exam_id for efficient lookup
+    responses_by_exam = defaultdict(list)
+    for resp in all_responses:
+        responses_by_exam[resp.exam_id].append(resp)
+
+    # Group detailed attempts by teacher
+    performance_by_teacher = defaultdict(lambda: {'attempts_details': [], 'total_score': 0.0, 'count': 0, 'average_score': 0.0})
+
+    for attempt in attempts:
+        if not (attempt.exam and attempt.exam.teacher):
+            continue # Skip if exam or teacher is missing
+
+        teacher = attempt.exam.teacher
+        exam_responses = responses_by_exam.get(attempt.exam.id, [])
+
+        # Calculate detailed stats for this attempt
+        total_marks = 0
+        easy_marks, medium_marks, hard_marks = 0, 0, 0
+        easy_total, medium_total, hard_total = 0, 0, 0
+
+        for response in exam_responses:
+            # Ensure response has a question and selected choice before processing
+            if not response.question or not response.selected_choice:
+                continue
+
+            difficulty = response.question.difficulty
+            is_correct = response.selected_choice.is_correct
+
+            if difficulty.lower() == 'easy':
+                easy_total += 1
+                if is_correct: easy_marks += 1
+            elif difficulty.lower() == 'medium':
+                medium_total += 1
+                if is_correct: medium_marks += 1
+            elif difficulty.lower() == 'hard':
+                hard_total += 1
+                if is_correct: hard_marks += 1
+
+            if is_correct:
+                total_marks += 1 # This might differ from attempt.score if scoring logic changes
+
+        overall_total = easy_total + medium_total + hard_total
+
+        # Determine level classification (using the same 80% threshold logic)
+        level = "Needs Improvement"
+        # Check division by zero
+        if hard_total > 0 and (hard_marks / hard_total) >= 0.8: level = "Advanced"
+        elif medium_total > 0 and (medium_marks / medium_total) >= 0.8: level = "Intermediate"
+        elif easy_total > 0 and (easy_marks / easy_total) >= 0.8: level = "Beginner"
+
+        # Store attempt and its details
+        attempt_details = {
+            'attempt': attempt,
+            'total_marks': total_marks, # Correct answers count
+            'overall_total': overall_total, # Total questions count
+            'easy_marks': easy_marks,
+            'easy_total': easy_total,
+            'medium_marks': medium_marks,
+            'medium_total': medium_total,
+            'hard_marks': hard_marks,
+            'hard_total': hard_total,
+            'level': level,
+        }
+        performance_by_teacher[teacher]['attempts_details'].append(attempt_details)
+
+        # Update teacher's average score calculation
+        if attempt.score is not None:
+            performance_by_teacher[teacher]['total_score'] += attempt.score
+            performance_by_teacher[teacher]['count'] += 1
+
+    # Calculate average score for each teacher
+    for teacher, data in performance_by_teacher.items():
+        if data['count'] > 0:
+            data['average_score'] = round(data['total_score'] / data['count'], 2)
+
+    context = {
+        'student': student,
+        'performance_data': dict(performance_by_teacher),
+    }
+    return render(request, 'exams/student_performance_by_teacher.html', context)
 @login_required(login_url='teacher_login')
 def student_exam_responses(request, student_id, exam_id):
     student = get_object_or_404(User, id=student_id, is_student=True)
@@ -522,39 +631,82 @@ def student_dashboard_view(request):
 from django.contrib import messages
 from .models import StudentResponse  # Import the new model
 
+from django.utils import timezone # Add this import at the top if not already present
+
 @login_required(login_url='student_login')
 def take_exam(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id)
 
-    if StudentResponse.objects.filter(student=request.user, exam=exam).exists():
-        messages.error(request, "You have already attempted this exam.")
+    # Check if an attempt with a score already exists
+    existing_attempt = StudentExamAttempt.objects.filter(student=request.user, exam=exam, score__isnull=False).first()
+    if existing_attempt:
+        messages.error(request, f"You have already completed this exam with a score of {existing_attempt.score:.2f}%.")
         return redirect('student_dashboard')
+    # Also check if responses exist (maybe attempt started but not finished/scored)
+    elif StudentResponse.objects.filter(student=request.user, exam=exam).exists():
+         # Clear previous responses if student is re-attempting before submission
+         StudentResponse.objects.filter(student=request.user, exam=exam).delete()
+
 
     questions = list(exam.questions.prefetch_related('answer_choices').all())
+    total_questions = len(questions)
 
     if request.method == 'POST':
         unanswered_questions = []
+        correct_answers = 0
+        responses_to_create = [] # Store responses temporarily
 
         for question in questions:
             selected_choice_id = request.POST.get(f"question_{question.id}")
             if not selected_choice_id:
                 unanswered_questions.append(question.text)
             else:
-                selected_choice = AnswerChoice.objects.get(id=selected_choice_id)
-                StudentResponse.objects.create(
-                    student=request.user,
-                    exam=exam,
-                    question=question,
-                    selected_choice=selected_choice
-                )
+                try:
+                    # Ensure choice belongs to the question to prevent manipulation
+                    selected_choice = AnswerChoice.objects.get(id=selected_choice_id, question=question)
+                    responses_to_create.append(
+                        StudentResponse(
+                            student=request.user,
+                            exam=exam,
+                            question=question,
+                            selected_choice=selected_choice
+                        )
+                    )
+                    if selected_choice.is_correct:
+                        correct_answers += 1
+                except AnswerChoice.DoesNotExist:
+                    messages.error(request, f"Invalid choice submitted for question: '{question.text[:50]}...'")
+                    # Redirect back to the exam page if there's an error
+                    return redirect('take_exam', exam_id=exam.id)
+
 
         if unanswered_questions:
-            messages.error(request, "Please answer all questions before submitting.")
+            # Provide more specific feedback
+            error_message = "Please answer the following questions before submitting: " + ", ".join([f"'{q[:50]}...'" for q in unanswered_questions])
+            messages.error(request, error_message)
+            # Redirect back to the exam page
             return redirect('take_exam', exam_id=exam.id)
 
-        messages.success(request, "Exam submitted successfully!")
-        return redirect('student_dashboard')
 
+        # If all questions answered, save responses
+        # Delete any previous responses for this attempt first (redundant if checked above, but safe)
+        StudentResponse.objects.filter(student=request.user, exam=exam).delete()
+        StudentResponse.objects.bulk_create(responses_to_create)
+
+        # Calculate score (as percentage)
+        score = (correct_answers / total_questions) * 100 if total_questions > 0 else 0
+
+        # Create or update StudentExamAttempt
+        attempt, created = StudentExamAttempt.objects.update_or_create(
+            student=request.user,
+            exam=exam,
+            defaults={'score': score, 'end_time': timezone.now()} # Use timezone.now()
+        )
+
+        messages.success(request, f"Exam submitted successfully! Your score: {score:.2f}%")
+        return redirect('student_dashboard') # Redirect to dashboard after submission
+
+    # GET request: Prepare questions for display
     prepared_questions = []
     for question in questions:
         answer_choices_list = list(question.answer_choices.all())

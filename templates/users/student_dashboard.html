@@ -5,6 +5,7 @@
 {% block content %}
 <div class="container">
     <h2 class="text-center mt-3">Welcome, {{ user.username }}!</h2>
+<a href="{% url 'student_performance_by_teacher' student_id=user.id %}" class="btn btn-info btn-sm float-end">View Performance History</a>
 
     <div class="card p-3 mt-4">
         <h3>Available Exams</h3>
