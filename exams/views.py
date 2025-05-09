@@ -637,83 +637,73 @@ from django.utils import timezone # Add this import at the top if not already pr
 def take_exam(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id)
 
-    # Check if an attempt with a score already exists
+    # Check if already completed
     existing_attempt = StudentExamAttempt.objects.filter(student=request.user, exam=exam, score__isnull=False).first()
     if existing_attempt:
         messages.error(request, f"You have already completed this exam with a score of {existing_attempt.score:.2f}%.")
         return redirect('student_dashboard')
-    # Also check if responses exist (maybe attempt started but not finished/scored)
-    elif StudentResponse.objects.filter(student=request.user, exam=exam).exists():
-         # Clear previous responses if student is re-attempting before submission
-         StudentResponse.objects.filter(student=request.user, exam=exam).delete()
-
 
     questions = list(exam.questions.prefetch_related('answer_choices').all())
     total_questions = len(questions)
 
+    # Use POST data or default to 0
+    current_index = int(request.POST.get('question_index', 0))
+
     if request.method == 'POST':
-        unanswered_questions = []
-        correct_answers = 0
-        responses_to_create = [] # Store responses temporarily
+        question_id = request.POST.get('question_id')
+        choice_id = request.POST.get('answer')
 
-        for question in questions:
-            selected_choice_id = request.POST.get(f"question_{question.id}")
-            if not selected_choice_id:
-                unanswered_questions.append(question.text)
-            else:
-                try:
-                    # Ensure choice belongs to the question to prevent manipulation
-                    selected_choice = AnswerChoice.objects.get(id=selected_choice_id, question=question)
-                    responses_to_create.append(
-                        StudentResponse(
-                            student=request.user,
-                            exam=exam,
-                            question=question,
-                            selected_choice=selected_choice
-                        )
-                    )
-                    if selected_choice.is_correct:
-                        correct_answers += 1
-                except AnswerChoice.DoesNotExist:
-                    messages.error(request, f"Invalid choice submitted for question: '{question.text[:50]}...'")
-                    # Redirect back to the exam page if there's an error
-                    return redirect('take_exam', exam_id=exam.id)
+        if question_id and choice_id:
+            try:
+                question = next(q for q in questions if str(q.id) == question_id)
+                choice = AnswerChoice.objects.get(id=choice_id, question=question)
 
+                # Save the response (delete if exists)
+                StudentResponse.objects.update_or_create(
+                    student=request.user,
+                    exam=exam,
+                    question=question,
+                    defaults={'selected_choice': choice}
+                )
+            except (AnswerChoice.DoesNotExist, StopIteration):
+                messages.error(request, "Invalid response. Please try again.")
+                return redirect('take_exam', exam_id=exam.id)
 
-        if unanswered_questions:
-            # Provide more specific feedback
-            error_message = "Please answer the following questions before submitting: " + ", ".join([f"'{q[:50]}...'" for q in unanswered_questions])
-            messages.error(request, error_message)
-            # Redirect back to the exam page
-            return redirect('take_exam', exam_id=exam.id)
+            current_index += 1
 
+        # If all questions answered, calculate score
+        if current_index >= total_questions:
+            correct_answers = StudentResponse.objects.filter(
+                student=request.user,
+                exam=exam,
+                selected_choice__is_correct=True
+            ).count()
 
-        # If all questions answered, save responses
-        # Delete any previous responses for this attempt first (redundant if checked above, but safe)
-        StudentResponse.objects.filter(student=request.user, exam=exam).delete()
-        StudentResponse.objects.bulk_create(responses_to_create)
+            score = (correct_answers / total_questions) * 100 if total_questions else 0
+            StudentExamAttempt.objects.update_or_create(
+                student=request.user,
+                exam=exam,
+                defaults={'score': score, 'end_time': timezone.now()}
+            )
 
-        # Calculate score (as percentage)
-        score = (correct_answers / total_questions) * 100 if total_questions > 0 else 0
+            messages.success(request, f"Exam submitted successfully! Your score: {score:.2f}%")
+            return redirect('student_dashboard')
 
-        # Create or update StudentExamAttempt
-        attempt, created = StudentExamAttempt.objects.update_or_create(
-            student=request.user,
-            exam=exam,
-            defaults={'score': score, 'end_time': timezone.now()} # Use timezone.now()
-        )
+    # Show current question
+    if current_index < total_questions:
+        question = questions[current_index]
+        answer_choices = list(question.answer_choices.all())
+        random.shuffle(answer_choices)
 
-        messages.success(request, f"Exam submitted successfully! Your score: {score:.2f}%")
-        return redirect('student_dashboard') # Redirect to dashboard after submission
+        return render(request, 'exams/take_exam.html', {
+            'exam': exam,
+            'question': question,
+            'answer_choices': answer_choices,
+            'question_index': current_index,
+            'total_questions': total_questions
+        })
 
-    # GET request: Prepare questions for display
-    prepared_questions = []
-    for question in questions:
-        answer_choices_list = list(question.answer_choices.all())
-        random.shuffle(answer_choices_list)
-        prepared_questions.append({'question': question, 'answer_choices': answer_choices_list})
-
-    return render(request, 'exams/take_exam.html', {'exam': exam, 'prepared_questions': prepared_questions})
+    return redirect('student_dashboard')
 
 @login_required(login_url='teacher_login')
 def edit_question(request, question_id):
