@@ -520,6 +520,8 @@ def delete_student_response(request, student_id, exam_id):
 
     # Delete the student's responses for this exam
     StudentResponse.objects.filter(student=student, exam=exam).delete()
+    # Also delete the StudentExamAttempt to allow retake
+    StudentExamAttempt.objects.filter(student=student, exam=exam).delete()
 
     messages.success(request, f"Responses for {student.username} in {exam.title} have been deleted.")
     return redirect('teacher_dashboard')

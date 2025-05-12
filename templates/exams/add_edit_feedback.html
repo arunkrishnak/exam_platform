@@ -1,0 +1,32 @@
+{% extends 'base.html' %}
+
+{% block title %}
+Add/Edit Feedback for {{ student.username }} - {{ exam.title|default:"N/A" }}
+{% endblock %}
+
+{% block content %}
+<div class="container mt-4">
+    <h2>Add/Edit Feedback</h2>
+    <p><strong>Student:</strong> {{ student.username }}</p>
+    <p><strong>Exam:</strong> {{ exam.title|default:"N/A" }}</p>
+    <p><strong>Attempt Score:</strong> {{ attempt.score|default:"Not scored yet" }}</p>
+    <p><strong>Attempt Date:</strong> {{ attempt.start_time|date:"Y-m-d H:i" }}</p>
+
+    <form method="post">
+        {% csrf_token %}
+        <div class="form-group">
+            {{ form.feedback.label_tag }}
+            {{ form.feedback }}
+            {% if form.feedback.errors %}
+                <div class="invalid-feedback d-block">
+                    {% for error in form.feedback.errors %}
+                        <p>{{ error }}</p>
+                    {% endfor %}
+                </div>
+            {% endif %}
+        </div>
+        <button type="submit" class="btn btn-primary mt-3">Save Feedback</button>
+        <a href="{% url 'student_performance_by_teacher' student_id=student.id %}" class="btn btn-secondary mt-3">Cancel</a>
+    </form>
+</div>
+{% endblock %}
