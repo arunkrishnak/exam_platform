@@ -1,29 +1,26 @@
 {% extends 'base.html' %}
+
 {% block title %}Take Exam{% endblock %}
 
 {% block content %}
-<div class="container mt-4">
-    <h2>{{ exam.title }}</h2>
-    <p>Question {{ question_index|add:1 }} of {{ total_questions }}</p>
+<div class="card p-4">
+    <h4 class="mb-3">{{ exam.title }}</h4>
+    <p><strong>Currently Answering:</strong> {{ current_level|title }} Section</p>
 
     <form method="post">
         {% csrf_token %}
-        <input type="hidden" name="question_id" value="{{ question.id }}">
-        <input type="hidden" name="question_index" value="{{ question_index }}">
-
-        <div class="card p-4 mb-3">
-            <h5>{{ question.text }}</h5>
-            {% for choice in answer_choices %}
-                <div class="form-check">
-                    <input class="form-check-input" type="radio" name="answer" value="{{ choice.id }}" required>
-                    <label class="form-check-label">{{ choice.text }}</label>
-                </div>
-            {% endfor %}
-        </div>
-
-        <button type="submit" class="btn btn-primary">
-            {% if question_index|add:1 < total_questions %}Next{% else %}Finish{% endif %}
-        </button>
+        {% for question in questions %}
+            <div class="mb-4">
+                <p><strong>{{ forloop.counter }}. {{ question.text }}</strong></p>
+                {% for choice in question.answer_choices.all %}
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="question_{{ question.id }}" id="choice_{{ choice.id }}" value="{{ choice.id }}">
+                        <label class="form-check-label" for="choice_{{ choice.id }}">{{ choice.text }}</label>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+        <button type="submit" class="btn btn-primary">Submit</button>
     </form>
 </div>
 {% endblock %}

@@ -59,6 +59,14 @@ class StudentExamAttempt(models.Model):
     start_time = models.DateTimeField(auto_now_add=True)
     end_time = models.DateTimeField(null=True, blank=True)
     score = models.FloatField(null=True, blank=True)
+    
+    easy_score = models.IntegerField(default=0)
+    easy_total = models.IntegerField(default=0)
+    medium_score = models.IntegerField(default=0)
+    medium_total = models.IntegerField(default=0)
+    hard_score = models.IntegerField(default=0)
+    hard_total = models.IntegerField(default=0)
+    eligibility = models.CharField(max_length=20, default='Needs Improvement')
 
     def __str__(self):
         return f"{self.student.username} - {self.exam.title}"

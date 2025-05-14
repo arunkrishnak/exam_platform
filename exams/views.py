@@ -637,73 +637,135 @@ from django.utils import timezone # Add this import at the top if not already pr
 def take_exam(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id)
 
-    # Check if already completed
+    # Check if already attempted
     existing_attempt = StudentExamAttempt.objects.filter(student=request.user, exam=exam, score__isnull=False).first()
     if existing_attempt:
         messages.error(request, f"You have already completed this exam with a score of {existing_attempt.score:.2f}%.")
         return redirect('student_dashboard')
 
-    questions = list(exam.questions.prefetch_related('answer_choices').all())
-    total_questions = len(questions)
+    # Fetch and group questions
+    questions = list(exam.questions.prefetch_related('answer_choices').all().order_by('difficulty'))
+    grouped_questions = {'easy': [], 'medium': [], 'hard': []}
+    for q in questions:
+        grouped_questions[q.difficulty.lower()].append(q)
 
-    # Use POST data or default to 0
-    current_index = int(request.POST.get('question_index', 0))
+    # Session state to track which level to show
+    if 'level_progress' not in request.session:
+        request.session['level_progress'] = 'easy'
+
+    current_level = request.session['level_progress']
+    allowed_levels = ['easy']
+    if current_level == 'medium':
+        allowed_levels.append('medium')
+    elif current_level == 'hard':
+        allowed_levels += ['medium', 'hard']
+
+    # Only show questions from allowed levels
+    questions_to_show = []
+    for lvl in allowed_levels:
+        questions_to_show.extend(grouped_questions[lvl])
 
     if request.method == 'POST':
-        question_id = request.POST.get('question_id')
-        choice_id = request.POST.get('answer')
+        responses_to_create = []
+        level_correct = {'easy': 0, 'medium': 0, 'hard': 0}
+        level_total = {'easy': len(grouped_questions['easy']), 'medium': len(grouped_questions['medium']), 'hard': len(grouped_questions['hard'])}
 
-        if question_id and choice_id:
-            try:
-                question = next(q for q in questions if str(q.id) == question_id)
-                choice = AnswerChoice.objects.get(id=choice_id, question=question)
-
-                # Save the response (delete if exists)
-                StudentResponse.objects.update_or_create(
-                    student=request.user,
-                    exam=exam,
-                    question=question,
-                    defaults={'selected_choice': choice}
-                )
-            except (AnswerChoice.DoesNotExist, StopIteration):
-                messages.error(request, "Invalid response. Please try again.")
+        # Validate and collect responses only from shown questions
+        for q in questions_to_show:
+            selected_choice_id = request.POST.get(f"question_{q.id}")
+            if not selected_choice_id:
+                messages.error(request, f"You did not answer: '{q.text[:50]}...'")
                 return redirect('take_exam', exam_id=exam.id)
 
-            current_index += 1
+            try:
+                selected_choice = AnswerChoice.objects.get(id=selected_choice_id, question=q)
+                responses_to_create.append(StudentResponse(
+                    student=request.user,
+                    exam=exam,
+                    question=q,
+                    selected_choice=selected_choice
+                ))
+                if selected_choice.is_correct:
+                    level_correct[q.difficulty.lower()] += 1
+            except AnswerChoice.DoesNotExist:
+                messages.error(request, f"Invalid choice for: '{q.text[:50]}...'")
+                return redirect('take_exam', exam_id=exam.id)
 
-        # If all questions answered, calculate score
-        if current_index >= total_questions:
-            correct_answers = StudentResponse.objects.filter(
-                student=request.user,
-                exam=exam,
-                selected_choice__is_correct=True
-            ).count()
+        # Save student responses
+        StudentResponse.objects.bulk_create(responses_to_create)
 
-            score = (correct_answers / total_questions) * 100 if total_questions else 0
+        # Decide next level based on score
+        next_level = None
+        if current_level == 'easy':
+            if level_total['easy'] > 0 and level_correct['easy'] >= (level_total['easy'] // 2 + 1):
+                request.session['level_progress'] = 'medium'
+                return redirect('take_exam', exam_id=exam.id)
+            else:
+                next_level = 'end'
+        elif current_level == 'medium':
+            if level_total['medium'] > 0 and level_correct['medium'] >= (level_total['medium'] // 2 + 1):
+                request.session['level_progress'] = 'hard'
+                return redirect('take_exam', exam_id=exam.id)
+            else:
+                next_level = 'end'
+        elif current_level == 'hard':
+            next_level = 'end'
+
+        # If exam ends here
+        if next_level == 'end':
+            del request.session['level_progress']
+            all_responses = StudentResponse.objects.filter(student=request.user, exam=exam)
+            level_correct_final = {'easy': 0, 'medium': 0, 'hard': 0}
+            level_total_final = {'easy': 0, 'medium': 0, 'hard': 0}
+            for resp in all_responses:
+                lvl = resp.question.difficulty.lower()
+                level_total_final[lvl] += 1
+                if resp.selected_choice.is_correct:
+                    level_correct_final[lvl] += 1
+
+            total_correct = sum(level_correct_final.values())
+            total_questions = sum(level_total_final.values())
+            score_percent = (total_correct / total_questions * 100) if total_questions > 0 else 0
+
+            eligibility = 'Needs Improvement'
+            if level_correct_final['easy'] >= (level_total_final['easy'] // 2 + 1):
+                if level_correct_final['medium'] >= (level_total_final['medium'] // 2 + 1):
+                    if level_correct_final['hard'] >= (level_total_final['hard'] // 2 + 1):
+                        eligibility = 'Excellent'
+                    else:
+                        eligibility = 'Average'
+
+            # Save final attempt
             StudentExamAttempt.objects.update_or_create(
                 student=request.user,
                 exam=exam,
-                defaults={'score': score, 'end_time': timezone.now()}
+                defaults={
+                    'score': score_percent,
+                    'end_time': timezone.now(),
+                    'easy_score': level_correct_final['easy'],
+                    'easy_total': level_total_final['easy'],
+                    'medium_score': level_correct_final['medium'],
+                    'medium_total': level_total_final['medium'],
+                    'hard_score': level_correct_final['hard'],
+                    'hard_total': level_total_final['hard'],
+                    'eligibility': eligibility
+                }
             )
 
-            messages.success(request, f"Exam submitted successfully! Your score: {score:.2f}%")
+            if eligibility == 'Needs Improvement':
+                messages.warning(request, "You did not pass the easy section, so medium and hard sections were not attempted.")
+            elif eligibility == 'Average':
+                messages.warning(request, "You did not pass the medium section, so hard section was not attempted.")
+            else:
+                messages.success(request, f"Exam submitted successfully! Your score: {score_percent:.2f}%")
+
             return redirect('student_dashboard')
 
-    # Show current question
-    if current_index < total_questions:
-        question = questions[current_index]
-        answer_choices = list(question.answer_choices.all())
-        random.shuffle(answer_choices)
-
-        return render(request, 'exams/take_exam.html', {
-            'exam': exam,
-            'question': question,
-            'answer_choices': answer_choices,
-            'question_index': current_index,
-            'total_questions': total_questions
-        })
-
-    return redirect('student_dashboard')
+    return render(request, 'exams/take_exam.html', {
+        'exam': exam,
+        'questions': questions_to_show,
+        'current_level': current_level
+    })
 
 @login_required(login_url='teacher_login')
 def edit_question(request, question_id):
