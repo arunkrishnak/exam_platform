@@ -82,8 +82,6 @@ The application will be available at `http://127.0.0.1:8000/`.
 ├── templates/
 │   ├── base.html
 │   ├── home.html
-│   ├── exams/
-│   └── users/
 └── users/
     ├── forms.py
     ├── models.py
