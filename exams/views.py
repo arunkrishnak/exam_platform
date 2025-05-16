@@ -16,6 +16,7 @@ from django.forms import modelform_factory
 from collections import defaultdict
 from django.db.models import Avg
 client = Client()
+from django.views.decorators.http import require_POST # Import require_POST
 
 def extract_text_from_pdf(pdf_file):
     text = ""
@@ -511,6 +512,7 @@ def delete_exam(request, exam_id):
 
 
 @login_required(login_url='teacher_login')
+@require_POST
 def delete_student_response(request, student_id, exam_id):
     if not request.user.is_teacher:
         return redirect('home')
@@ -640,8 +642,8 @@ def take_exam(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id)
 
     # Check if already completed
-    existing_attempt = StudentExamAttempt.objects.filter(student=request.user, exam=exam, score__isnull=False).first()
-    if existing_attempt:
+    existing_attempt = StudentExamAttempt.objects.filter(student=request.user, exam=exam).first()
+    if existing_attempt and existing_attempt.score is not None:
         messages.error(request, f"You have already completed this exam with a score of {existing_attempt.score:.2f}%.")
         return redirect('student_dashboard')
 
