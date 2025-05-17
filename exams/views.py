@@ -638,106 +638,96 @@ from .models import StudentResponse  # Import the new model
 from django.utils import timezone # Add this import at the top if not already present
 
 @login_required(login_url='student_login')
+
 def take_exam(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id)
 
-    # Check if already attempted
-    existing_attempt = StudentExamAttempt.objects.filter(student=request.user, exam=exam).first()
-    if existing_attempt and existing_attempt.score is not None:
+    # Check if already fully completed
+    existing_attempt = StudentExamAttempt.objects.filter(student=request.user, exam=exam, score__isnull=False).first()
+    if existing_attempt:
         messages.error(request, f"You have already completed this exam with a score of {existing_attempt.score:.2f}%.")
         return redirect('student_dashboard')
 
-    # Fetch and group questions
-    questions = list(exam.questions.prefetch_related('answer_choices').all().order_by('difficulty'))
+    questions = list(exam.questions.prefetch_related('answer_choices').all().order_by('difficulty', 'id'))
     grouped_questions = {'easy': [], 'medium': [], 'hard': []}
     for q in questions:
         grouped_questions[q.difficulty.lower()].append(q)
 
-    # Session state to track which level to show
-    if 'level_progress' not in request.session:
-        request.session['level_progress'] = 'easy'
+    # Control flow: one question at a time
+    current_question_index = int(request.session.get('current_question_index', 0))
+    allowed_levels = request.session.get('allowed_levels', ['easy'])
 
-    current_level = request.session['level_progress']
-    allowed_levels = ['easy']
-    if current_level == 'medium':
-        allowed_levels.append('medium')
-    elif current_level == 'hard':
-        allowed_levels += ['medium', 'hard']
+    # Flatten allowed questions only
+    allowed_questions = [
+        q for level in allowed_levels for q in grouped_questions[level]
+    ]
+    total_questions = len(allowed_questions)
 
-    # Only show questions from allowed levels
-    questions_to_show = []
-    for lvl in allowed_levels:
-        questions_to_show.extend(grouped_questions[lvl])
-
+    # Handle submission
     if request.method == 'POST':
-        responses_to_create = []
-        level_correct = {'easy': 0, 'medium': 0, 'hard': 0}
-        level_total = {'easy': len(grouped_questions['easy']), 'medium': len(grouped_questions['medium']), 'hard': len(grouped_questions['hard'])}
+        question_id = request.POST.get('question_id')
+        selected_choice_id = request.POST.get('choice')
 
-        # Validate and collect responses only from shown questions
-        for q in questions_to_show:
-            selected_choice_id = request.POST.get(f"question_{q.id}")
-            if not selected_choice_id:
-                messages.error(request, f"You did not answer: '{q.text[:50]}...'")
-                return redirect('take_exam', exam_id=exam.id)
+        if question_id and selected_choice_id:
+            question = get_object_or_404(Question, id=question_id)
+            selected_choice = get_object_or_404(AnswerChoice, id=selected_choice_id)
 
-            try:
-                selected_choice = AnswerChoice.objects.get(id=selected_choice_id, question=q)
-                responses_to_create.append(StudentResponse(
+            # Save temporary response (session)
+            response_data = request.session.get('responses', [])
+            response_data.append({
+                'question_id': question.id,
+                'choice_id': selected_choice.id,
+                'level': question.difficulty.lower(),
+                'correct': selected_choice.is_correct,
+            })
+            request.session['responses'] = response_data
+
+            # Advance to next question
+            current_question_index += 1
+            request.session['current_question_index'] = current_question_index
+
+        # If all questions answered, process and submit
+        if current_question_index >= total_questions:
+            response_data = request.session.get('responses', [])
+
+            # Score tracking
+            level_correct = {'easy': 0, 'medium': 0, 'hard': 0}
+            level_total = {'easy': 0, 'medium': 0, 'hard': 0}
+
+            for q in allowed_questions:
+                level_total[q.difficulty.lower()] += 1
+
+            responses_to_save = []
+
+            for item in response_data:
+                q = get_object_or_404(Question, id=item['question_id'])
+                choice = get_object_or_404(AnswerChoice, id=item['choice_id'])
+
+                if item['correct']:
+                    level_correct[item['level']] += 1
+
+                responses_to_save.append(StudentResponse(
                     student=request.user,
                     exam=exam,
                     question=q,
-                    selected_choice=selected_choice
+                    selected_choice=choice
                 ))
-                if selected_choice.is_correct:
-                    level_correct[q.difficulty.lower()] += 1
-            except AnswerChoice.DoesNotExist:
-                messages.error(request, f"Invalid choice for: '{q.text[:50]}...'")
-                return redirect('take_exam', exam_id=exam.id)
 
-        # Save student responses
-        StudentResponse.objects.bulk_create(responses_to_create)
+            StudentResponse.objects.bulk_create(responses_to_save)
 
-        # Decide next level based on score
-        next_level = None
-        if current_level == 'easy':
-            if level_total['easy'] > 0 and level_correct['easy'] >= (level_total['easy'] // 2 + 1):
-                request.session['level_progress'] = 'medium'
-                return redirect('take_exam', exam_id=exam.id)
-            else:
-                next_level = 'end'
-        elif current_level == 'medium':
-            if level_total['medium'] > 0 and level_correct['medium'] >= (level_total['medium'] // 2 + 1):
-                request.session['level_progress'] = 'hard'
-                return redirect('take_exam', exam_id=exam.id)
-            else:
-                next_level = 'end'
-        elif current_level == 'hard':
-            next_level = 'end'
+            # Calculate score
+            total_score = sum(level_correct.values())
+            total_possible = sum(level_total.values())
+            score_percent = (total_score / total_possible) * 100 if total_possible > 0 else 0
 
-        # If exam ends here
-        if next_level == 'end':
-            del request.session['level_progress']
-            all_responses = StudentResponse.objects.filter(student=request.user, exam=exam)
-            level_correct_final = {'easy': 0, 'medium': 0, 'hard': 0}
-            level_total_final = {'easy': 0, 'medium': 0, 'hard': 0}
-            for resp in all_responses:
-                lvl = resp.question.difficulty.lower()
-                level_total_final[lvl] += 1
-                if resp.selected_choice.is_correct:
-                    level_correct_final[lvl] += 1
-
-            total_correct = sum(level_correct_final.values())
-            total_questions = sum(level_total_final.values())
-            score_percent = (total_correct / total_questions * 100) if total_questions > 0 else 0
-
+            # Check eligibility and allow further levels
             eligibility = 'Needs Improvement'
-            if level_correct_final['easy'] >= (level_total_final['easy'] // 2 + 1):
-                if level_correct_final['medium'] >= (level_total_final['medium'] // 2 + 1):
-                    if level_correct_final['hard'] >= (level_total_final['hard'] // 2 + 1):
-                        eligibility = 'Excellent'
-                    else:
-                        eligibility = 'Average'
+            if level_correct['easy'] >= (level_total['easy'] / 2):
+                eligibility = 'Average'
+                allowed_levels.append('medium')
+            if level_correct['medium'] >= (level_total['medium'] / 2):
+                eligibility = 'Excellent'
+                allowed_levels.append('hard')
 
             # Save final attempt
             StudentExamAttempt.objects.update_or_create(
@@ -746,30 +736,87 @@ def take_exam(request, exam_id):
                 defaults={
                     'score': score_percent,
                     'end_time': timezone.now(),
-                    'easy_score': level_correct_final['easy'],
-                    'easy_total': level_total_final['easy'],
-                    'medium_score': level_correct_final['medium'],
-                    'medium_total': level_total_final['medium'],
-                    'hard_score': level_correct_final['hard'],
-                    'hard_total': level_total_final['hard'],
+                    'easy_score': level_correct['easy'],
+                    'easy_total': level_total['easy'],
+                    'medium_score': level_correct['medium'],
+                    'medium_total': level_total['medium'],
+                    'hard_score': level_correct['hard'],
+                    'hard_total': level_total['hard'],
                     'eligibility': eligibility
                 }
             )
 
-            if eligibility == 'Needs Improvement':
+            # Clear session
+            request.session.pop('responses', None)
+            request.session.pop('current_question_index', None)
+            request.session.pop('allowed_levels', None)
+
+            # Show result message
+            if 'medium' not in allowed_levels:
                 messages.warning(request, "You did not pass the easy section, so medium and hard sections were not attempted.")
-            elif eligibility == 'Average':
+            elif 'hard' not in allowed_levels:
                 messages.warning(request, "You did not pass the medium section, so hard section was not attempted.")
             else:
                 messages.success(request, f"Exam submitted successfully! Your score: {score_percent:.2f}%")
 
             return redirect('student_dashboard')
 
-    return render(request, 'exams/take_exam.html', {
-        'exam': exam,
-        'questions': questions_to_show,
-        'current_level': current_level
-    })
+    # Render current question
+    if current_question_index < total_questions:
+        question = allowed_questions[current_question_index]
+        return render(request, 'exams/take_exam.html', {
+            'exam': exam,
+            'question': question,
+            'answer_choices': question.answer_choices.all(),
+            'question_index': current_question_index + 1,
+            'total_questions': total_questions,
+            'level': question.difficulty,
+        })
+
+    return redirect('student_dashboard')  # fallback
+        
+def finalize_exam(request, exam, questions):
+    level_correct = request.session.get('level_correct', {})
+    level_total = request.session.get('level_total', {})
+    allowed_levels = request.session.get('allowed_levels', [])
+
+    total_score = sum(level_correct.get(lvl, 0) for lvl in ['easy', 'medium', 'hard'])
+    total_possible = sum(level_total.get(lvl, 0) for lvl in ['easy', 'medium', 'hard'])
+
+    score_percent = (total_score / total_possible) * 100 if total_possible > 0 else 0
+
+    StudentExamAttempt.objects.update_or_create(
+        student=request.user,
+        exam=exam,
+        defaults={
+            'score': score_percent,
+            'end_time': timezone.now(),
+            'easy_score': level_correct.get('easy', 0),
+            'easy_total': level_total.get('easy', 0),
+            'medium_score': level_correct.get('medium', 0),
+            'medium_total': level_total.get('medium', 0),
+            'hard_score': level_correct.get('hard', 0),
+            'hard_total': level_total.get('hard', 0),
+            'eligibility': 'Needs Improvement' if 'medium' not in allowed_levels else (
+                'Average' if 'hard' not in allowed_levels else 'Excellent'
+            )
+        }
+    )
+
+    # Clear session data
+    for key in ['question_index', 'level_correct', 'level_total', 'allowed_levels']:
+        if key in request.session:
+            del request.session[key]
+
+    if 'medium' not in allowed_levels:
+        messages.warning(request, "You did not pass the easy section, so medium and hard sections were not attempted.")
+    elif 'hard' not in allowed_levels:
+        messages.warning(request, "You did not pass the medium section, so hard section was not attempted.")
+    else:
+        messages.success(request, f"Exam submitted successfully! Your score: {score_percent:.2f}%")
+
+    return redirect('student_dashboard')
+
 
 @login_required(login_url='teacher_login')
 def edit_question(request, question_id):
