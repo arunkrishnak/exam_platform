@@ -4,13 +4,14 @@ from django.contrib.auth.decorators import login_required
 from .forms import TeacherSignUpForm, StudentSignUpForm, TeacherLoginForm, StudentLoginForm
 
 def teacher_signup(request):
-    if request.method == 'POST':
+    if request.method == 'POST':        # Check if the form is submitted
         form = TeacherSignUpForm(request.POST)
-        if form.is_valid():
+        if form.is_valid(): # Validate the form
+            # Save the user and log them in
             user = form.save()
             login(request, user)
             return redirect('teacher_dashboard')
-    else:
+    else:   # If the request method is GET, create a blank form
         form = TeacherSignUpForm()
     return render(request, 'users/teacher_signup.html', {'form': form})
 
@@ -34,7 +35,7 @@ def teacher_login_view(request):
                 login(request, user)
                 return redirect('teacher_dashboard')
             else:
-                form.add_error(None, "Please enter a correct username and password. Note that both fields may be case-sensitive.")  # Prevent students from logging in
+                form.add_error(None, "Please enter a correct username and password. Note that both fields may be case-sensitive.")  
     else:
         form = TeacherLoginForm()
     return render(request, 'users/teacher_login.html', {'form': form})
@@ -49,7 +50,7 @@ def student_login_view(request):
                 login(request, user)
                 return redirect('student_dashboard')
             else:
-                form.add_error(None, "Please enter a correct username and password. Note that both fields may be case-sensitive.")  # Prevent teachers from logging in
+                form.add_error(None, "Please enter a correct username and password. Note that both fields may be case-sensitive.")  
     else:
         form = StudentLoginForm()
     return render(request, 'users/student_login.html', {'form': form})

@@ -1,22 +1,19 @@
 from django.utils import timezone
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from .forms import PDFUploadForm, ExamCreationForm, QuestionCreationForm, AnswerChoiceFormSet  # Import AnswerChoiceFormSet
+from .forms import PDFUploadForm, ExamCreationForm, AnswerChoiceFormSet  
 from .models import PDFDocument, Exam, Question, StudentExamAttempt, AnswerChoice
 from PyPDF2 import PdfReader
 from g4f.client import Client
 from django.contrib import messages # Import messages framework
 from .models import User 
 from .models import StudentResponse  # Import the new model
-import random
-import json
-import re
-from django.forms import modelform_factory
-
+import re # Import re for regular expressions
+from django.forms import modelform_factory # For dynamically creating a form for editing questions.
 from collections import defaultdict
-from django.db.models import Avg
-client = Client()
 from django.views.decorators.http import require_POST # Import require_POST
+
+client = Client()
 
 def extract_text_from_pdf(pdf_file):
     text = ""
@@ -267,6 +264,7 @@ def student_performance_by_teacher(request, student_id):
         'performance_data': dict(performance_by_teacher),
     }
     return render(request, 'exams/student_performance_by_teacher.html', context)
+
 @login_required(login_url='teacher_login')
 def student_exam_responses(request, student_id, exam_id):
     student = get_object_or_404(User, id=student_id, is_student=True)
@@ -632,13 +630,8 @@ def student_dashboard_view(request):
     })
 
 
-from django.contrib import messages
-from .models import StudentResponse  # Import the new model
-
-from django.utils import timezone # Add this import at the top if not already present
 
 @login_required(login_url='student_login')
-
 def take_exam(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id)
 

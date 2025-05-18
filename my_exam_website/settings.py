@@ -11,20 +11,20 @@ from pathlib import Path
 import os
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent
-SECRET_KEY = 'b)4n$ju!5#5q-4+p(vv6q@e8t0rzw*9yq+h95&m9d(1e!4m)q*'
+BASE_DIR = Path(__file__).resolve().parent.parent  #Root project directory path 
+SECRET_KEY = 'b)4n$ju!5#5q-4+p(vv6q@e8t0rzw*9yq+h95&m9d(1e!4m)q*'       #Secret key for the project
 
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.0/ref/settings/#debug
-DEBUG = True
+DEBUG = True 
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = [] # List of allowed hosts for the application
 
 
 # Application definition
 
-INSTALLED_APPS = [
+INSTALLED_APPS = [      #These are the applications that are installed and available in the project.
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -35,7 +35,7 @@ INSTALLED_APPS = [
     'exams',
 ]
 
-MIDDLEWARE = [
+MIDDLEWARE = [                  #These are layers that process requests/responses globally.
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -45,12 +45,12 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
-ROOT_URLCONF = 'my_exam_website.urls'
+ROOT_URLCONF = 'my_exam_website.urls'       #URL configuration for the project
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': [os.path.join(BASE_DIR, 'templates')], # Add this line
+        'DIRS': [os.path.join(BASE_DIR, 'templates')],  #This lets Django look for HTML templates in the main templates/ directory of your project.
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -69,10 +69,10 @@ WSGI_APPLICATION = 'my_exam_website.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.0/ref/settings/#databases
 
-DATABASES = {
+DATABASES = {       #This is where the database settings are defined.
     'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'ENGINE': 'django.db.backends.sqlite3', #Using SQLite as the database engine
+        'NAME': BASE_DIR / 'db.sqlite3',  #Path to the SQLite database file
     }
 }
 
@@ -80,18 +80,18 @@ DATABASES = {
 # Password validation
 # https://docs.djangoproject.com/en/5.0/ref/settings/#auth-password-validators
 
-AUTH_PASSWORD_VALIDATORS = [
+AUTH_PASSWORD_VALIDATORS = [    #Django built-in validators to ensure secure password creation.
     {
-        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator',
+        'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator', # Checks if the password is similar to user attributes
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+        'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',# Checks if the password is at least a certain length
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',
+        'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator',# Checks if the password is not too common
     },
     {
-        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',
+        'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator',# Checks if the password is not entirely numeric
     },
 ]
 
@@ -121,7 +121,7 @@ MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.0/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField' # Default field type for primary keys
 
 AUTH_USER_MODEL = 'users.User'
 

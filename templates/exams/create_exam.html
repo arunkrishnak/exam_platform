@@ -3,12 +3,12 @@
 {% block content %}
     <h2>Create Exam</h2>
     <form method="post" enctype="multipart/form-data">
-        {% csrf_token %}
+        {% csrf_token %}    <!-- CSRF token for security -->
         
         <!-- Title -->
         <div class="mb-3">
             <label for="id_title" class="form-label">Exam Title</label>
-            {{ exam_form.title }}
+            {{ exam_form.title }} 
         </div>
 
         <!-- Description -->
