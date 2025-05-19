@@ -12,6 +12,9 @@ import re # Import re for regular expressions
 from django.forms import modelform_factory # dynamically creates ModelForm classes from Django models
 from collections import defaultdict
 from django.views.decorators.http import require_POST # handle form submissions, data creation
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt # Django will not check for a CSRF protection token on requests to that view
+
 
 client = Client()
 
@@ -346,75 +349,6 @@ def student_exam_responses(request, student_id, exam_id):
         'total_possible_marks': total_possible_marks,  # Total marks possible
     })
     
-@login_required(login_url='teacher_login')
-def student_exam_responses(request, student_id, exam_id):
-    student = get_object_or_404(User, id=student_id, is_student=True)
-    exam = get_object_or_404(Exam, id=exam_id)
-    responses = StudentResponse.objects.filter(student=student, exam=exam).select_related('question', 'selected_choice')
-
-    # Initialize topic-wise tracking and overall totals
-    topic_data = {}
-    total_marks_obtained = 0
-    total_possible_marks = 0
-
-    # Helper function to check if the student passed (80% threshold)
-    def is_passed(marks, total):
-        return total > 0 and (marks / total) >= 0.8
-
-    # Calculate correct responses and totals by topic and difficulty
-    for response in responses:
-        topic = response.question.topic
-        difficulty = response.question.difficulty
-
-        if topic not in topic_data:
-            topic_data[topic] = {
-                'easy_marks': 0, 'easy_total': 0,
-                'medium_marks': 0, 'medium_total': 0,
-                'hard_marks': 0, 'hard_total': 0
-            }
-
-        # Update totals and correct answers
-        if difficulty.lower() == 'easy':
-            topic_data[topic]['easy_total'] += 1
-            if response.selected_choice and response.selected_choice.is_correct:
-                topic_data[topic]['easy_marks'] += 1
-        elif difficulty.lower() == 'medium':
-            topic_data[topic]['medium_total'] += 1
-            if response.selected_choice and response.selected_choice.is_correct:
-                topic_data[topic]['medium_marks'] += 1
-        elif difficulty.lower() == 'hard':
-            topic_data[topic]['hard_total'] += 1
-            if response.selected_choice and response.selected_choice.is_correct:
-                topic_data[topic]['hard_marks'] += 1
-
-    # Determine student level for each topic and calculate total marks
-    for topic, data in topic_data.items():
-        total_marks_obtained += data['easy_marks'] + data['medium_marks'] + data['hard_marks']
-        total_possible_marks += data['easy_total'] + data['medium_total'] + data['hard_total']
-
-        # Determine the student's level based on progression
-        if not is_passed(data['easy_marks'], data['easy_total']):
-            data['level'] = "Needs Improvement"
-        elif is_passed(data['easy_marks'], data['easy_total']):
-            if not is_passed(data['medium_marks'], data['medium_total']):
-                data['level'] = "Beginner"
-            elif is_passed(data['medium_marks'], data['medium_total']):
-                if is_passed(data['hard_marks'], data['hard_total']):
-                    data['level'] = "Advanced"
-                else:
-                    data['level'] = "Intermediate"
-
-    return render(request, 'users/student_exam_responses.html', {
-        'student': student,
-        'exam': exam,
-        'responses': responses,
-        'topic_data': topic_data,  # Pass topic-wise data to the template
-        'total_marks_obtained': total_marks_obtained,  # Total marks obtained
-        'total_possible_marks': total_possible_marks,  # Total marks possible
-    })
-
-
-
 
 @login_required(login_url='teacher_login')
 def teacher_dashboard_view(request):
@@ -490,7 +424,7 @@ def teacher_dashboard_view(request):
         else:
             print("❌ Form errors:", exam_form.errors)
 
-    else:
+    else:  # GET request
         exam_form = ExamCreationForm()
 
     student_exam_pairs = set((resp.student, resp.exam) for resp in student_responses)
@@ -551,20 +485,20 @@ def view_exam(request, exam_id):
     })
 
 @login_required(login_url='teacher_login')
-def upload_pdf(request): # Keep PDF upload independent for now - might remove later
+def upload_pdf(request): 
     if request.method == 'POST':
         form = PDFUploadForm(request.POST, request.FILES)
         if form.is_valid():
             pdf_document = form.save(commit=False)
             pdf_document.teacher = request.user
             pdf_document.save()
-            messages.success(request, 'PDF uploaded successfully!') # Success message
+            messages.success(request, 'PDF uploaded successfully!') 
             return redirect('teacher_dashboard')
         else:
-            messages.error(request, 'PDF upload failed. Please check the form.') # Error message
+            messages.error(request, 'PDF upload failed. Please check the form.')
     else:
         form = PDFUploadForm()
-    return render(request, 'exams/upload_pdf.html', {'form': form}) # Or handle in dashboard template
+    return render(request, 'exams/upload_pdf.html', {'form': form}) 
 
 @login_required(login_url='teacher_login')
 def create_exam(request):
@@ -666,7 +600,6 @@ def take_exam(request, exam_id):
     current_question_index = request.session.get('current_question_index', 0)
     allowed_levels = request.session.get('allowed_levels', ['easy'])
 
-    # Flatten allowed questions
     allowed_questions = [q for level in allowed_levels for q in grouped_questions[level]]
     total_questions = len(allowed_questions)
 
@@ -725,7 +658,6 @@ def take_exam(request, exam_id):
                 request.session['current_question_index'] = len(allowed_questions)
                 return redirect('take_exam', exam_id=exam.id)
 
-            # Else: exam complete
             # Save responses to DB
             StudentResponse.objects.filter(student=request.user, exam=exam).delete()
             bulk_objects = []
@@ -795,47 +727,7 @@ def take_exam(request, exam_id):
 
     return redirect('student_dashboard')
         
-def finalize_exam(request, exam, questions):
-    level_correct = request.session.get('level_correct', {})
-    level_total = request.session.get('level_total', {})
-    allowed_levels = request.session.get('allowed_levels', [])
 
-    total_score = sum(level_correct.get(lvl, 0) for lvl in ['easy', 'medium', 'hard'])
-    total_possible = sum(level_total.get(lvl, 0) for lvl in ['easy', 'medium', 'hard'])
-
-    score_percent = (total_score / total_possible) * 100 if total_possible > 0 else 0
-
-    StudentExamAttempt.objects.update_or_create(
-        student=request.user,
-        exam=exam,
-        defaults={
-            'score': score_percent,
-            'end_time': timezone.now(),
-            'easy_score': level_correct.get('easy', 0),
-            'easy_total': level_total.get('easy', 0),
-            'medium_score': level_correct.get('medium', 0),
-            'medium_total': level_total.get('medium', 0),
-            'hard_score': level_correct.get('hard', 0),
-            'hard_total': level_total.get('hard', 0),
-            'eligibility': 'Needs Improvement' if 'medium' not in allowed_levels else (
-                'Average' if 'hard' not in allowed_levels else 'Excellent'
-            )
-        }
-    )
-
-    # Clear session data
-    for key in ['question_index', 'level_correct', 'level_total', 'allowed_levels']:
-        if key in request.session:
-            del request.session[key]
-
-    if 'medium' not in allowed_levels:
-        messages.warning(request, "You did not pass the easy section, so medium and hard sections were not attempted.")
-    elif 'hard' not in allowed_levels:
-        messages.warning(request, "You did not pass the medium section, so hard section was not attempted.")
-    else:
-        messages.success(request, f"Exam submitted successfully! Your score: {score_percent:.2f}%")
-
-    return redirect('student_dashboard')
 
 
 @login_required(login_url='teacher_login')
@@ -861,8 +753,7 @@ def edit_question(request, question_id):
         'formset': formset,
     })
 
-from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt # Import csrf_exempt for AJAX view
+
 
 @csrf_exempt # Consider adding proper CSRF handling for production
 @require_POST
