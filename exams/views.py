@@ -5,13 +5,13 @@ from .forms import PDFUploadForm, ExamCreationForm, AnswerChoiceFormSet
 from .models import PDFDocument, Exam, Question, StudentExamAttempt, AnswerChoice
 from PyPDF2 import PdfReader
 from g4f.client import Client
-from django.contrib import messages # Import messages framework
+from django.contrib import messages # for user feedback, one-time notifications to users
 from .models import User 
 from .models import StudentResponse  # Import the new model
 import re # Import re for regular expressions
-from django.forms import modelform_factory # For dynamically creating a form for editing questions.
+from django.forms import modelform_factory # dynamically creates ModelForm classes from Django models
 from collections import defaultdict
-from django.views.decorators.http import require_POST # Import require_POST
+from django.views.decorators.http import require_POST # handle form submissions, data creation
 
 client = Client()
 
@@ -47,14 +47,7 @@ def extract_skills_from_text(text, num_skills=10):
 
     except Exception as e:
         print(f"GPT Skill Extraction Error: {e}")
-        # Fallback to keyword matching if GPT fails
-        fallback_skills = set()
-        possible_skills = ["Java", "Python", "MySQL", "JavaScript", "C++", "Django", "HTML", "CSS"] # Keep fallback list
-        for skill in possible_skills:
-            if skill.lower() in text.lower():
-                fallback_skills.add(skill)
-        return list(fallback_skills)
-
+        
 def generate_questions_with_gpt(text, num_questions=3, num_options=4, topic_prompt=""):
     try:
         # Create the prompt based on whether topic_prompt is provided.
@@ -156,7 +149,7 @@ Question 2: ...
 
                 if line.lower().startswith('correct answer:'):
                     correct_letter = line.split(':', 1)[-1].strip().lower()
-                    correct_answer_index = ord(correct_letter) - ord('a')
+                    correct_answer_index = ord(correct_letter) - ord('a') # Convert letter to index
                 else:
                     match = re.match(r'^([a-z])\.\s*(.+)$', line)
                     if match:
@@ -173,16 +166,13 @@ Question 2: ...
 
         # Ensure we only return the required number of questions
         questions_data = questions_data[:num_questions]
-
-
-
         return questions_data
 
     except Exception as e:
         print(f"GPT Error: {e}")
         return []
 
-@login_required # Assuming student login for now
+@login_required 
 def student_performance_by_teacher(request, student_id):
     """
     Displays a student's exam performance history, grouped by the teacher
@@ -214,7 +204,7 @@ def student_performance_by_teacher(request, student_id):
         responses_by_exam[resp.exam_id].append(resp)
 
     # Group detailed attempts by teacher
-    performance_by_teacher = defaultdict(lambda: {'attempts_details': [], 'total_score': 0.0, 'count': 0, 'average_score': 0.0})
+    performance_by_teacher = defaultdict(lambda: {'attempts_details': [], 'total_score': 0.0, 'count': 0, 'average_score': 0.0}) # 
 
     for attempt in attempts:
         if not (attempt.exam and attempt.exam.teacher):
@@ -252,7 +242,7 @@ def student_performance_by_teacher(request, student_id):
         overall_total = easy_total + medium_total + hard_total
 
         # Determine level classification (using the same 80% threshold logic)
-        level = "Needs Improvement"
+        level = "Needs Improvement"  # Default level
         # Check division by zero
         if hard_total > 0 and (hard_marks / hard_total) >= 0.8: level = "Advanced"
         elif medium_total > 0 and (medium_marks / medium_total) >= 0.8: level = "Intermediate"
@@ -659,94 +649,106 @@ def student_dashboard_view(request):
 def take_exam(request, exam_id):
     exam = get_object_or_404(Exam, id=exam_id)
 
-    # Check if already fully completed
+    # Block if already completed
     existing_attempt = StudentExamAttempt.objects.filter(student=request.user, exam=exam, score__isnull=False).first()
     if existing_attempt:
         messages.error(request, f"You have already completed this exam with a score of {existing_attempt.score:.2f}%.")
         return redirect('student_dashboard')
 
+    # Get and group questions by difficulty
     questions = list(exam.questions.prefetch_related('answer_choices').all().order_by('difficulty', 'id'))
     grouped_questions = {'easy': [], 'medium': [], 'hard': []}
     for q in questions:
         grouped_questions[q.difficulty.lower()].append(q)
 
-    # Control flow: one question at a time
-    current_question_index = int(request.session.get('current_question_index', 0))
+    # Session variables
+    responses = request.session.get('responses', [])
+    current_question_index = request.session.get('current_question_index', 0)
     allowed_levels = request.session.get('allowed_levels', ['easy'])
 
-    # Flatten allowed questions only
-    allowed_questions = [
-        q for level in allowed_levels for q in grouped_questions[level]
-    ]
+    # Flatten allowed questions
+    allowed_questions = [q for level in allowed_levels for q in grouped_questions[level]]
     total_questions = len(allowed_questions)
 
-    # Handle submission
+    # Handle form submission
     if request.method == 'POST':
         question_id = request.POST.get('question_id')
         selected_choice_id = request.POST.get('choice')
 
-        if question_id and selected_choice_id:
+        if not question_id or not selected_choice_id:
+            messages.error(request, "Please select an answer before continuing.")
+            return redirect('take_exam', exam_id=exam.id)
+
+        try:
             question = get_object_or_404(Question, id=question_id)
-            selected_choice = get_object_or_404(AnswerChoice, id=selected_choice_id)
+            selected_choice = get_object_or_404(AnswerChoice, id=selected_choice_id, question=question)
+        except:
+            messages.error(request, "Invalid question or choice.")
+            return redirect('take_exam', exam_id=exam.id)
 
-            # Save temporary response (session)
-            response_data = request.session.get('responses', [])
-            response_data.append({
-                'question_id': question.id,
-                'choice_id': selected_choice.id,
-                'level': question.difficulty.lower(),
-                'correct': selected_choice.is_correct,
-            })
-            request.session['responses'] = response_data
+        # Save response in session
+        responses.append({
+            'question_id': question.id,
+            'choice_id': selected_choice.id,
+            'correct': selected_choice.is_correct,
+            'level': question.difficulty.lower()
+        })
+        request.session['responses'] = responses
 
-            # Advance to next question
-            current_question_index += 1
-            request.session['current_question_index'] = current_question_index
+        # Advance to next question
+        current_question_index += 1
+        request.session['current_question_index'] = current_question_index
 
-        # If all questions answered, process and submit
-        if current_question_index >= total_questions:
-            response_data = request.session.get('responses', [])
-
-            # Score tracking
+        # If all current allowed questions are done
+        if current_question_index >= len(allowed_questions):
+            # Calculate performance
             level_correct = {'easy': 0, 'medium': 0, 'hard': 0}
             level_total = {'easy': 0, 'medium': 0, 'hard': 0}
+            for r in responses:
+                level = r['level']
+                level_total[level] += 1
+                if r['correct']:
+                    level_correct[level] += 1
 
-            for q in allowed_questions:
-                level_total[q.difficulty.lower()] += 1
+            # Update allowed levels
+            new_allowed_levels = ['easy']
+            if level_total['easy'] > 0 and (level_correct['easy'] / level_total['easy']) >= 0.5:
+                new_allowed_levels.append('medium')
+            if level_total['medium'] > 0 and (level_correct['medium'] / level_total['medium']) >= 0.5:
+                new_allowed_levels.append('hard')
 
-            responses_to_save = []
+            # Check if new questions are unlocked
+            updated_questions = [q for level in new_allowed_levels for q in grouped_questions[level]]
+            if len(updated_questions) > len(allowed_questions):
+                # Update session with newly unlocked questions
+                request.session['allowed_levels'] = new_allowed_levels
+                request.session['current_question_index'] = len(allowed_questions)
+                return redirect('take_exam', exam_id=exam.id)
 
-            for item in response_data:
-                q = get_object_or_404(Question, id=item['question_id'])
-                choice = get_object_or_404(AnswerChoice, id=item['choice_id'])
+            # Else: exam complete
+            # Save responses to DB
+            StudentResponse.objects.filter(student=request.user, exam=exam).delete()
+            bulk_objects = []
+            for r in responses:
+                q = get_object_or_404(Question, id=r['question_id'])
+                choice = get_object_or_404(AnswerChoice, id=r['choice_id'])
+                bulk_objects.append(StudentResponse(student=request.user, exam=exam, question=q, selected_choice=choice))
+            StudentResponse.objects.bulk_create(bulk_objects)
 
-                if item['correct']:
-                    level_correct[item['level']] += 1
-
-                responses_to_save.append(StudentResponse(
-                    student=request.user,
-                    exam=exam,
-                    question=q,
-                    selected_choice=choice
-                ))
-
-            StudentResponse.objects.bulk_create(responses_to_save)
-
-            # Calculate score
+            # Final score
             total_score = sum(level_correct.values())
             total_possible = sum(level_total.values())
             score_percent = (total_score / total_possible) * 100 if total_possible > 0 else 0
 
-            # Check eligibility and allow further levels
-            eligibility = 'Needs Improvement'
-            if level_correct['easy'] >= (level_total['easy'] / 2):
-                eligibility = 'Average'
-                allowed_levels.append('medium')
-            if level_correct['medium'] >= (level_total['medium'] / 2):
-                eligibility = 'Excellent'
-                allowed_levels.append('hard')
+            # Determine level
+            if 'medium' not in new_allowed_levels:
+                level_label = 'Needs Improvement'
+            elif 'hard' not in new_allowed_levels:
+                level_label = 'Average'
+            else:
+                level_label = 'Excellent'
 
-            # Save final attempt
+            # Save attempt
             StudentExamAttempt.objects.update_or_create(
                 student=request.user,
                 exam=exam,
@@ -759,7 +761,7 @@ def take_exam(request, exam_id):
                     'medium_total': level_total['medium'],
                     'hard_score': level_correct['hard'],
                     'hard_total': level_total['hard'],
-                    'eligibility': eligibility
+                    'eligibility': level_label
                 }
             )
 
@@ -768,29 +770,30 @@ def take_exam(request, exam_id):
             request.session.pop('current_question_index', None)
             request.session.pop('allowed_levels', None)
 
-            # Show result message
-            if 'medium' not in allowed_levels:
+            if 'medium' not in new_allowed_levels:
                 messages.warning(request, "You did not pass the easy section, so medium and hard sections were not attempted.")
-            elif 'hard' not in allowed_levels:
+            elif 'hard' not in new_allowed_levels:
                 messages.warning(request, "You did not pass the medium section, so hard section was not attempted.")
             else:
                 messages.success(request, f"Exam submitted successfully! Your score: {score_percent:.2f}%")
 
             return redirect('student_dashboard')
 
+        return redirect('take_exam', exam_id=exam.id)
+
     # Render current question
-    if current_question_index < total_questions:
+    if current_question_index < len(allowed_questions):
         question = allowed_questions[current_question_index]
         return render(request, 'exams/take_exam.html', {
             'exam': exam,
             'question': question,
             'answer_choices': question.answer_choices.all(),
             'question_index': current_question_index + 1,
-            'total_questions': total_questions,
-            'level': question.difficulty,
+            'total_questions': len(allowed_questions),
+            'level': question.difficulty
         })
 
-    return redirect('student_dashboard')  # fallback
+    return redirect('student_dashboard')
         
 def finalize_exam(request, exam, questions):
     level_correct = request.session.get('level_correct', {})
