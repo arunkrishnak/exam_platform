@@ -22,14 +22,38 @@ def extract_text_from_pdf(pdf_file):
         text += page.extract_text()
     return text
 
-def extract_skills_from_text(text):
-    """Extract skills using simple keyword matching or AI-based extraction"""
-    skills = set()
-    possible_skills = ["Java", "Python", "MySQL", "JavaScript", "C++", "Django", "HTML", "CSS"]  # Extendable skill list
-    for skill in possible_skills:
-        if skill.lower() in text.lower():
-            skills.add(skill)
-    return list(skills)
+def extract_skills_from_text(text, num_skills=10):
+    """Extract skills using AI-based extraction with GPT."""
+    try:
+        prompt_text = f"""Analyze the following text and identify up to {num_skills} key technical skills or topics mentioned in the text.
+        Provide the skills as a comma-separated list.
+
+        Text:
+        {text}
+
+        Example Output: Skill 1, Skill 2, Skill 3
+        """
+
+        response = client.chat.completions.create(
+            model="gpt-4o-mini", # Using a cost-effective model for this task
+            messages=[{"role": "user", "content": prompt_text}],
+            web_search=False
+        )
+        gpt_response = response.choices[0].message.content
+
+        # Split the response by comma and strip whitespace
+        skills = [skill.strip() for skill in gpt_response.split(',') if skill.strip()]
+        return skills[:num_skills] # Return up to num_skills
+
+    except Exception as e:
+        print(f"GPT Skill Extraction Error: {e}")
+        # Fallback to keyword matching if GPT fails
+        fallback_skills = set()
+        possible_skills = ["Java", "Python", "MySQL", "JavaScript", "C++", "Django", "HTML", "CSS"] # Keep fallback list
+        for skill in possible_skills:
+            if skill.lower() in text.lower():
+                fallback_skills.add(skill)
+        return list(fallback_skills)
 
 def generate_questions_with_gpt(text, num_questions=3, num_options=4, topic_prompt=""):
     try:
@@ -833,6 +857,43 @@ def edit_question(request, question_id):
         'form': form,
         'formset': formset,
     })
+
+from django.http import JsonResponse
+from django.views.decorators.csrf import csrf_exempt # Import csrf_exempt for AJAX view
+
+@csrf_exempt # Consider adding proper CSRF handling for production
+@require_POST
+@login_required(login_url='teacher_login')
+def generate_skills_from_pdf(request):
+    """
+    Receives a PDF file via AJAX, extracts text, generates skills,
+    and returns them as a JSON response.
+    """
+    print("generate_skills_from_pdf view entered.") # Log entry point
+
+    if not request.user.is_teacher:
+        print("Unauthorized access to generate_skills_from_pdf.") # Log unauthorized access
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+
+    if 'pdf_file' not in request.FILES:
+        print("No PDF file uploaded in request.FILES.") # Log missing file
+        return JsonResponse({'error': 'No PDF file uploaded'}, status=400)
+
+    pdf_file = request.FILES['pdf_file']
+    print(f"Received PDF file: {pdf_file.name}") # Log received file name
+
+    try:
+        text = extract_text_from_pdf(pdf_file)
+        print(f"Extracted text length: {len(text)}") # Log extracted text length
+        # print(f"Extracted text: {text[:500]}...") # Log first 500 characters of extracted text
+
+        skills = extract_skills_from_text(text)
+        print(f"Generated skills: {skills}") # Log generated skills
+
+        return JsonResponse({'skills': skills})
+    except Exception as e:
+        print(f"Error generating skills: {e}") # Log the exception
+        return JsonResponse({'error': 'Error processing PDF'}, status=500)
 
 def home(request):
     return render(request, 'home.html')

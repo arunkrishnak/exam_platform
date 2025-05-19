@@ -28,10 +28,17 @@
                 </script>
             </div>
 
-            <!-- PDF Upload -->
+            <!-- PDF Upload and Generate Skills Button -->
             <div class="mb-3">
                 <label for="id_pdf_document" class="form-label">Upload PDF (Optional)</label>
-                {{ exam_creation_form.pdf_document }}
+                <div class="d-flex align-items-center"> {# Use flexbox for alignment #}
+                    <div class="flex-grow-1 me-2"> {# Allow input to grow and add margin to the right #}
+                        {{ exam_creation_form.pdf_document }}
+                    </div>
+                    <div>
+                        <button type="button" class="btn btn-secondary btn-sm" id="generate-skills-button">Generate Skills</button>
+                    </div>
+                </div>
             </div>
 
             <!-- Skills (Manual Entry) -->
@@ -104,4 +111,68 @@
     </div>
 
 </div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function() {
+        const generateSkillsButton = document.getElementById('generate-skills-button');
+        const pdfDocumentInput = document.getElementById('id_pdf_document');
+        const skillsInput = document.getElementById('id_skills');
+        const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+
+        generateSkillsButton.addEventListener('click', function() {
+            if (pdfDocumentInput.files.length === 0) {
+                alert("Please upload a PDF file first.");
+                return;
+            }
+
+            // Show loading indicator and disable button
+            generateSkillsButton.disabled = true;
+            const originalButtonText = generateSkillsButton.textContent;
+            generateSkillsButton.textContent = 'Generating...';
+
+            const formData = new FormData();
+            formData.append('pdf_file', pdfDocumentInput.files[0]);
+
+            // Use a relative URL for the AJAX request
+            const fetchUrl = "{% url 'generate_skills_from_pdf' %}";
+            console.log('Fetching URL:', fetchUrl); // Log the URL being fetched
+
+            fetch(fetchUrl, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'X-CSRFToken': csrfToken
+                }
+            })
+            .then(response => {
+                if (!response.ok) {
+                    // Attempt to read error message from response if available
+                    return response.json().then(err => { throw new Error(err.error || 'Network response was not ok'); });
+                }
+                return response.json();
+            })
+            .then(data => {
+                console.log('Response data:', data); // Log the entire response data
+                if (data.skills) {
+                    console.log('Generated skills:', data.skills); // Log the skills array
+                    skillsInput.value = data.skills.join(', ');
+                    alert("Skills generated successfully!");
+                } else {
+                    console.log('No skills generated or skills field missing.'); // Log if skills are missing
+                    alert("Could not generate skills from the PDF.");
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert("An error occurred while generating skills: " + error.message);
+            })
+            .finally(() => {
+                // Re-enable button and restore text
+                generateSkillsButton.disabled = false;
+                generateSkillsButton.textContent = originalButtonText;
+            });
+        });
+    });
+</script>
+
 {% endblock %}

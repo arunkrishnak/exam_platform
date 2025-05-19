@@ -16,4 +16,6 @@ path('student/<int:student_id>/performance-by-teacher/', views.student_performan
     path('teacher/exam/<int:exam_id>/', views.view_exam, name='view_exam'),
     path('teacher/student_responses/<int:student_id>/<int:exam_id>/', views.student_exam_responses, name='student_exam_responses'),
     path('teacher/question/<int:question_id>/edit/', views.edit_question, name='edit_question'),
+    path('teacher/question/<int:question_id>/edit/', views.edit_question, name='edit_question'),
+    path('teacher/generate_skills/', views.generate_skills_from_pdf, name='generate_skills_from_pdf'), # New URL for generating skills
 ]
