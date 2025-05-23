@@ -41,6 +41,12 @@
             {{ exam_form.topic_prompt }}
         </div>
 
+        <!-- Number of Skills to Generate -->
+        <div class="mb-3">
+            <label for="id_num_skills_to_generate" class="form-label">Number of Skills to Auto-Generate (Optional)</label>
+            <input type="number" id="id_num_skills_to_generate" name="num_skills_to_generate" class="form-control" min="1" value="5">
+        </div>
+
         <button type="submit" class="btn btn-primary">Create Exam</button>
     </form>
 {% endblock %}

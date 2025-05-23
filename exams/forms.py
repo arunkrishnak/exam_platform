@@ -13,6 +13,7 @@ class ExamCreationForm(forms.ModelForm):
     topic_prompt = forms.CharField(widget=forms.Textarea, required=False, label="Topic Prompt (Optional)")
     num_questions_per_level = forms.IntegerField(min_value=1, max_value=10, initial=3, label="Number of Questions per Level")
     skills = forms.CharField(required=True, label="Skills (comma-separated)")
+    num_skills_to_generate = forms.IntegerField(min_value=1, required=False, initial=5, label="Number of Skills to Auto-Generate (Optional)")
 
     class Meta:
         model = Exam

@@ -38,9 +38,9 @@ def extract_skills_from_text(text, num_skills=10):
         """
 
         response = client.chat.completions.create(
-            model="gpt-4o-mini", # Using a cost-effective model for this task
+            model="gpt-4o", # Using a cost-effective model for this task
             messages=[{"role": "user", "content": prompt_text}],
-            web_search=False
+            web_search=True
         )
         gpt_response = response.choices[0].message.content
 
@@ -776,12 +776,18 @@ def generate_skills_from_pdf(request):
     pdf_file = request.FILES['pdf_file']
     print(f"Received PDF file: {pdf_file.name}") # Log received file name
 
+    num_skills = request.POST.get('num_skills', 5) # Get num_skills from POST, default to 5
+    try:
+        num_skills = int(num_skills)
+    except ValueError:
+        num_skills = 5 # Fallback if conversion fails
+
     try:
         text = extract_text_from_pdf(pdf_file)
         print(f"Extracted text length: {len(text)}") # Log extracted text length
         # print(f"Extracted text: {text[:500]}...") # Log first 500 characters of extracted text
 
-        skills = extract_skills_from_text(text)
+        skills = extract_skills_from_text(text, num_skills=num_skills)
         print(f"Generated skills: {skills}") # Log generated skills
 
         return JsonResponse({'skills': skills})
