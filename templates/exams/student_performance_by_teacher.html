@@ -10,7 +10,7 @@
     {% if performance_data %}
         <div class="accordion" id="performanceAccordion">
             {% for teacher, data in performance_data.items %}
-                <div class="accordion-item mb-3"> {# Added margin bottom for spacing #}
+                <div class="accordion-item mb-3"> 
                     <h2 class="accordion-header" id="heading-{{ teacher.id }}">
                         <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapse-{{ teacher.id }}" aria-expanded="false" aria-controls="collapse-{{ teacher.id }}">
                             <strong>{{ teacher.username }}</strong>&nbsp; (Average Score: {{ data.average_score }}%)
@@ -20,7 +20,7 @@
                         <div class="accordion-body">
                             {% if data.attempts_details %}
                                 {% for details in data.attempts_details %}
-                                    <div class="card mb-3"> {# Card for each attempt #}
+                                    <div class="card mb-3">
                                         <div class="card-header d-flex justify-content-between align-items-center">
                                             <span>
                                                 <strong>{{ details.attempt.exam.title }}</strong>

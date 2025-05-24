@@ -6,13 +6,11 @@
 <div class="container">
     <h2 class="text-center mt-3">Responses for {{ student.username }} - {{ exam.title }}</h2>
 
-    <!-- Total Exam Marks Section -->
     <div class="card p-3 mt-3">
         <h4>Total Exam Marks</h4>
         <p><strong>Total Marks:</strong> {{ total_marks_obtained }} / {{ total_possible_marks }}</p>
     </div>
 
-    <!-- Topic-wise Breakdown -->
     {% for topic, data in topic_data.items %}
     <div class="card p-3 mt-3">
         <h4>{{ topic }}</h4>

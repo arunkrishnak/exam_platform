@@ -20,8 +20,6 @@ class ExamCreationForm(forms.ModelForm):
         fields = ['title', 'description']
 
 
-
-
 # Base form for AnswerChoice - will be used in formset
 class AnswerChoiceForm(forms.ModelForm):
     class Meta:

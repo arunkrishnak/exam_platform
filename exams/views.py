@@ -755,14 +755,11 @@ def edit_question(request, question_id):
 
 
 
-@csrf_exempt # Consider adding proper CSRF handling for production
+@csrf_exempt 
 @require_POST
 @login_required(login_url='teacher_login')
 def generate_skills_from_pdf(request):
-    """
-    Receives a PDF file via AJAX, extracts text, generates skills,
-    and returns them as a JSON response.
-    """
+
     print("generate_skills_from_pdf view entered.") # Log entry point
 
     if not request.user.is_teacher:
@@ -785,7 +782,6 @@ def generate_skills_from_pdf(request):
     try:
         text = extract_text_from_pdf(pdf_file)
         print(f"Extracted text length: {len(text)}") # Log extracted text length
-        # print(f"Extracted text: {text[:500]}...") # Log first 500 characters of extracted text
 
         skills = extract_skills_from_text(text, num_skills=num_skills)
         print(f"Generated skills: {skills}") # Log generated skills
