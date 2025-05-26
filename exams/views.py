@@ -34,7 +34,7 @@ def extract_skills_from_text(text, num_skills=10):
         Text:
         {text}
 
-        Example Output: Skill 1, Skill 2, Skill 3
+        Example Output: Sub topic 1, Sub topic 2, Sub topic 3
         """
 
         response = client.chat.completions.create(
@@ -49,7 +49,7 @@ def extract_skills_from_text(text, num_skills=10):
         return skills[:num_skills] # Return up to num_skills
 
     except Exception as e:
-        print(f"GPT Skill Extraction Error: {e}")
+        print(f"GPT Sub topic Extraction Error: {e}")
         
 def generate_questions_with_gpt(text, num_questions=3, num_options=4, topic_prompt=""):
     try:
