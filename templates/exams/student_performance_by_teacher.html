@@ -46,6 +46,17 @@
                                                     {{ details.level }}
                                                 </span>
                                             </p>
+                                            {% if details.attempt.feedback %}
+                                                <div class="mt-3">
+                                                    <h6>Teacher Feedback:</h6>
+                                                    <p class="alert alert-secondary">{{ details.attempt.feedback }}</p>
+                                                </div>
+                                            {% endif %}
+                                            {% if request.user.is_teacher %}
+                                                <a href="{% url 'add_edit_feedback' student.id details.attempt.exam.id %}" class="btn btn-sm btn-outline-info mt-2">
+                                                    {% if details.attempt.feedback %}Edit Feedback{% else %}Add Feedback{% endif %}
+                                                </a>
+                                            {% endif %}
                                         </div>
                                     </div>
                                 {% endfor %}

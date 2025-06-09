@@ -67,6 +67,7 @@ class StudentExamAttempt(models.Model):
     hard_score = models.IntegerField(default=0)
     hard_total = models.IntegerField(default=0)
     eligibility = models.CharField(max_length=20, default='Needs Improvement')
+    feedback = models.TextField(blank=True, null=True) # Added feedback field
 
     def __str__(self):
         return f"{self.student.username} - {self.exam.title}"

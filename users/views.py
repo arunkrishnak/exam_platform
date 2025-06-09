@@ -59,13 +59,21 @@ def student_login_view(request):
 def teacher_dashboard(request):
     if not request.user.is_teacher:
         return redirect('home')
-    return render(request, 'users/teacher_dashboard.html')
+    response = render(request, 'users/teacher_dashboard.html')
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    return response
 
 @login_required(login_url='student_login')
 def student_dashboard(request):
     if not request.user.is_student:
         return redirect('home')
-    return render(request, 'users/student_dashboard.html')
+    response = render(request, 'users/student_dashboard.html')
+    response['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    response['Pragma'] = 'no-cache'
+    response['Expires'] = '0'
+    return response
 
 def logout_view(request):
     logout(request)

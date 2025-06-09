@@ -1,7 +1,7 @@
 from django.utils import timezone
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
-from .forms import PDFUploadForm, ExamCreationForm, AnswerChoiceFormSet  
+from .forms import PDFUploadForm, ExamCreationForm, AnswerChoiceFormSet, FeedbackForm
 from .models import PDFDocument, Exam, Question, StudentExamAttempt, AnswerChoice
 from PyPDF2 import PdfReader
 from g4f.client import Client
@@ -204,7 +204,7 @@ def student_performance_by_teacher(request, student_id):
     # Group responses by exam_id for efficient lookup
     responses_by_exam = defaultdict(list)
     for resp in all_responses:
-        responses_by_exam[resp.exam_id].append(resp)
+        responses_by_exam[resp.exam.id].append(resp)
 
     # Group detailed attempts by teacher
     performance_by_teacher = defaultdict(lambda: {'attempts_details': [], 'total_score': 0.0, 'count': 0, 'average_score': 0.0}) # 
@@ -356,7 +356,13 @@ def teacher_dashboard_view(request):
         return redirect('home')
 
     exams = Exam.objects.filter(teacher=request.user)
-    student_responses = StudentResponse.objects.filter(exam__in=exams).select_related('student', 'exam')
+    
+    # Fetch StudentExamAttempt objects for completed exams by students
+    student_attempts = StudentExamAttempt.objects.filter(
+        exam__teacher=request.user, # Only attempts for exams created by the current teacher
+        score__isnull=False, # Only completed attempts
+        student__is_student=True # Explicitly filter for students
+    ).select_related('student', 'exam').order_by('student__username', 'exam__title')
 
     if request.method == 'POST':
         exam_form = ExamCreationForm(request.POST, request.FILES)
@@ -427,12 +433,9 @@ def teacher_dashboard_view(request):
     else:  # GET request
         exam_form = ExamCreationForm()
 
-    student_exam_pairs = set((resp.student, resp.exam) for resp in student_responses)
-    student_responses_list = [{'student': s, 'exam': e} for s, e in student_exam_pairs]
-
     return render(request, 'users/teacher_dashboard.html', {
         'exams': exams,
-        'student_responses_list': student_responses_list,
+        'student_attempts': student_attempts, # Pass student_attempts instead of student_responses_list
         'exam_creation_form': exam_form,
     })
 
@@ -729,7 +732,6 @@ def take_exam(request, exam_id):
         
 
 
-
 @login_required(login_url='teacher_login')
 def edit_question(request, question_id):
     question = get_object_or_404(Question, id=question_id, exam__teacher=request.user)
@@ -753,6 +755,50 @@ def edit_question(request, question_id):
         'formset': formset,
     })
 
+
+@login_required(login_url='teacher_login')
+def add_edit_feedback(request, student_id, exam_id):
+    print(f"DEBUG: >>> Entering add_edit_feedback view for student_id={student_id}, exam_id={exam_id} <<<")
+    
+    # First, try to get the user by ID without checking is_student
+    try:
+        student = User.objects.get(id=student_id)
+        print(f"DEBUG: User found: {student.username}, is_student={student.is_student}")
+    except User.DoesNotExist:
+        messages.error(request, f"Error: User with ID {student_id} not found.")
+        print(f"ERROR: User with ID {student_id} not found.")
+        return redirect('teacher_dashboard')
+
+    # Now, check if the found user is a student
+    if not student.is_student:
+        messages.error(request, f"Error: User '{student.username}' (ID: {student_id}) is not a student.")
+        print(f"ERROR: User '{student.username}' (ID: {student_id}) is not a student.")
+        return redirect('teacher_dashboard')
+
+    exam = get_object_or_404(Exam, id=exam_id)
+    
+    # Ensure the teacher is authorized to give feedback for this exam
+    if exam.teacher != request.user:
+        messages.error(request, "You are not authorized to give feedback for this exam.")
+        return redirect('teacher_dashboard')
+
+    attempt = get_object_or_404(StudentExamAttempt, student=student, exam=exam)
+
+    if request.method == 'POST':
+        form = FeedbackForm(request.POST, instance=attempt)
+        if form.is_valid():
+            form.save()
+            messages.success(request, "Feedback saved successfully!")
+            return redirect('student_performance_by_teacher', student_id=student.id)
+    else:
+        form = FeedbackForm(instance=attempt)
+
+    return render(request, 'exams/add_edit_feedback.html', {
+        'form': form,
+        'student': student,
+        'exam': exam,
+        'attempt': attempt,
+    })
 
 
 @csrf_exempt 

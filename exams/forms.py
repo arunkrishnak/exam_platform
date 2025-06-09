@@ -1,5 +1,5 @@
 from django import forms
-from .models import PDFDocument, Exam, Question, AnswerChoice
+from .models import PDFDocument, Exam, Question, AnswerChoice, StudentExamAttempt
 from django.forms import inlineformset_factory
 
 class PDFUploadForm(forms.ModelForm): # Keep PDF upload form for now
@@ -32,3 +32,11 @@ class QuestionCreationForm(forms.ModelForm): # We might not use this directly an
     class Meta:
         model = Question
         fields = ['text', 'difficulty']
+
+class FeedbackForm(forms.ModelForm):
+    class Meta:
+        model = StudentExamAttempt
+        fields = ['feedback']
+        widgets = {
+            'feedback': forms.Textarea(attrs={'rows': 4, 'cols': 40}),
+        }
