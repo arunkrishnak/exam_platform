@@ -19,7 +19,7 @@ SECRET_KEY = 'b)4n$ju!5#5q-4+p(vv6q@e8t0rzw*9yq+h95&m9d(1e!4m)q*'       #Secret 
 # See https://docs.djangoproject.com/en/5.0/ref/settings/#debug
 DEBUG = True 
 
-ALLOWED_HOSTS = [] # List of allowed hosts for the application
+ALLOWED_HOSTS = ['skilleval.amplelms.com'] # List of allowed hosts for the application
 
 
 # Application definition
@@ -130,3 +130,8 @@ SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 SESSION_COOKIE_AGE = 86400  # 1 day (set a default session expiry)
 SESSION_COOKIE_SECURE = False  # Set to True if using HTTPS
 SESSION_ENGINE = "django.contrib.sessions.backends.db"  # Store session in DB
+
+
+CSRF_TRUSTED_ORIGINS = [
+    'https://skilleval.amplelms.com',
+]
