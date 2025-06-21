@@ -19,7 +19,7 @@ SECRET_KEY = 'b)4n$ju!5#5q-4+p(vv6q@e8t0rzw*9yq+h95&m9d(1e!4m)q*'       #Secret 
 # See https://docs.djangoproject.com/en/5.0/ref/settings/#debug
 DEBUG = True 
 
-ALLOWED_HOSTS = ['skilleval.amplelms.com'] # List of allowed hosts for the application
+ALLOWED_HOSTS = ['skilleval.amplelms.com','127.0.0.1'] # List of allowed hosts for the application
 
 
 # Application definition
