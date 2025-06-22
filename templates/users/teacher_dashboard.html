@@ -90,9 +90,9 @@
         <ul class="list-group">
             {% for attempt in student_attempts %}
                 <li class="list-group-item d-flex justify-content-between align-items-center">
-                    <span>
-                        <strong>{{ attempt.student.username }}</strong> - {{ attempt.exam.title }} (Score: {{ attempt.score|floatformat:2 }}%)
-                    </span>
+                    <a href="{% url 'student_exam_responses' attempt.student.id attempt.exam.id %}">
+                    <strong>{{ attempt.student.username }}</strong> - {{ attempt.exam.title }} (Score: {{ attempt.score|floatformat:2 }}%)
+                    </a>
                     <div>
                         <a href="{% url 'add_edit_feedback' attempt.student.id attempt.exam.id %}" class="btn btn-info btn-sm me-2">Add/Edit Feedback</a>
                         <form method="post" action="{% url 'delete_student_response' attempt.student.id attempt.exam.id %}" class="d-inline">

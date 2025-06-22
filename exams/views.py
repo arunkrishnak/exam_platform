@@ -28,7 +28,7 @@ def extract_text_from_pdf(pdf_file):
 def extract_skills_from_text(text, num_skills=10):
     """Extract skills using AI-based extraction with GPT."""
     try:
-        prompt_text = f"""Analyze the following text and identify up to {num_skills} key technical skills or topics mentioned in the text.
+        prompt_text = f"""Analyze the following text and identify up to {num_skills} Main topics mentioned in the text.
         Provide the skills as a comma-separated list.
 
         Text:
@@ -38,7 +38,7 @@ def extract_skills_from_text(text, num_skills=10):
         """
 
         response = client.chat.completions.create(
-            model="gpt-4o", # Using a cost-effective model for this task
+            model="gpt-4o-mini", 
             messages=[{"role": "user", "content": prompt_text}],
             web_search=True
         )
@@ -389,7 +389,7 @@ def teacher_dashboard_view(request):
 
             for skill in skills:
                 for level in ["Easy", "Medium", "Hard"]:
-                    print(f"🔍 Generating questions for {skill} - {level}")
+                    #print(f"🔍 Generating questions for {skill} - {level}")
                     
                     # Keep generating until we have enough unique questions
                     while len([q for q in unique_questions if q[1] == level and q[2] == skill]) < num_questions_per_level:
@@ -422,8 +422,7 @@ def teacher_dashboard_view(request):
                                         is_correct=choice_data['is_correct']
                                     )
 
-                                print(f"✅ Saved Question: '{question.text}' (Difficulty: {question.difficulty})")
-
+                                #print(f"✅ Saved Question: '{question.text}' (Difficulty: {question.difficulty})")
 
 
             messages.success(request, "Exam created with questions!")
@@ -759,12 +758,12 @@ def edit_question(request, question_id):
 
 @login_required(login_url='teacher_login')
 def add_edit_feedback(request, student_id, exam_id):
-    print(f"DEBUG: >>> Entering add_edit_feedback view for student_id={student_id}, exam_id={exam_id} <<<")
+    #print(f"DEBUG: >>> Entering add_edit_feedback view for student_id={student_id}, exam_id={exam_id} <<<")
     
     # First, try to get the user by ID without checking is_student
     try:
         student = User.objects.get(id=student_id)
-        print(f"DEBUG: User found: {student.username}, is_student={student.is_student}")
+        #print(f"DEBUG: User found: {student.username}, is_student={student.is_student}")
     except User.DoesNotExist:
         messages.error(request, f"Error: User with ID {student_id} not found.")
         print(f"ERROR: User with ID {student_id} not found.")
@@ -810,30 +809,30 @@ def generate_skills_from_pdf(request):
     Receives either a PDF file or a topic prompt via AJAX,
     extracts/generates skills, and returns them as JSON.
     """
-    print("generate_skills_from_pdf view entered.")
+    #print("generate_skills_from_pdf view entered.")
 
     if not request.user.is_teacher:
-        print("Unauthorized access to generate_skills_from_pdf.")
+        #print("Unauthorized access to generate_skills_from_pdf.")
         return JsonResponse({'error': 'Unauthorized'}, status=403)
 
     pdf_file = request.FILES.get('pdf_file')
     topic_prompt = request.POST.get('topic_prompt', '').strip()
 
     if not pdf_file and not topic_prompt:
-        print("No topic prompt or PDF file provided.")
+        #print("No topic prompt or PDF file provided.")
         return JsonResponse({'error': 'Please provide a topic prompt or PDF.'}, status=400)
 
     try:
         if pdf_file:
-            print(f"Received PDF file: {pdf_file.name}")
+            #print(f"Received PDF file: {pdf_file.name}")
             text = extract_text_from_pdf(pdf_file)
-            print(f"Extracted text length: {len(text)}")
+            #print(f"Extracted text length: {len(text)}")
         else:
             text = topic_prompt
-            print("Using topic prompt as input text.")
+            #print("Using topic prompt as input text.")
 
         skills = extract_skills_from_text(text)
-        print(f"Generated skills: {skills}")
+        #print(f"Generated skills: {skills}")
 
         return JsonResponse({'skills': skills})
 
