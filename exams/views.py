@@ -116,7 +116,7 @@ Question 2: ...
 
         # Call the GPT model.
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4o",
             messages=[{"role": "user", "content": prompt_text}],
             web_search=False
         )
@@ -371,6 +371,7 @@ def teacher_dashboard_view(request):
             exam = exam_form.save(commit=False)
             exam.teacher = request.user
             pdf_file_uploaded = request.FILES.get('pdf_document')
+            topic_prompt = request.POST.get('topic_prompt', '').strip()
 
             # Capture skills from user input
             skills_input = exam_form.cleaned_data['skills']
@@ -383,7 +384,7 @@ def teacher_dashboard_view(request):
             num_questions_per_level = exam_form.cleaned_data['num_questions_per_level']
 
             # Generate questions for each skill and level
-            text = extract_text_from_pdf(pdf_file_uploaded) if pdf_file_uploaded else ""
+            text = extract_text_from_pdf(pdf_file_uploaded) if pdf_file_uploaded else topic_prompt
             unique_questions = set()
 
             for skill in skills:
@@ -801,41 +802,45 @@ def add_edit_feedback(request, student_id, exam_id):
     })
 
 
-@csrf_exempt 
+@csrf_exempt
 @require_POST
 @login_required(login_url='teacher_login')
 def generate_skills_from_pdf(request):
-
-    print("generate_skills_from_pdf view entered.") # Log entry point
+    """
+    Receives either a PDF file or a topic prompt via AJAX,
+    extracts/generates skills, and returns them as JSON.
+    """
+    print("generate_skills_from_pdf view entered.")
 
     if not request.user.is_teacher:
-        print("Unauthorized access to generate_skills_from_pdf.") # Log unauthorized access
+        print("Unauthorized access to generate_skills_from_pdf.")
         return JsonResponse({'error': 'Unauthorized'}, status=403)
 
-    if 'pdf_file' not in request.FILES:
-        print("No PDF file uploaded in request.FILES.") # Log missing file
-        return JsonResponse({'error': 'No PDF file uploaded'}, status=400)
+    pdf_file = request.FILES.get('pdf_file')
+    topic_prompt = request.POST.get('topic_prompt', '').strip()
 
-    pdf_file = request.FILES['pdf_file']
-    print(f"Received PDF file: {pdf_file.name}") # Log received file name
-
-    num_skills = request.POST.get('num_skills', 5) # Get num_skills from POST, default to 5
-    try:
-        num_skills = int(num_skills)
-    except ValueError:
-        num_skills = 5 # Fallback if conversion fails
+    if not pdf_file and not topic_prompt:
+        print("No topic prompt or PDF file provided.")
+        return JsonResponse({'error': 'Please provide a topic prompt or PDF.'}, status=400)
 
     try:
-        text = extract_text_from_pdf(pdf_file)
-        print(f"Extracted text length: {len(text)}") # Log extracted text length
+        if pdf_file:
+            print(f"Received PDF file: {pdf_file.name}")
+            text = extract_text_from_pdf(pdf_file)
+            print(f"Extracted text length: {len(text)}")
+        else:
+            text = topic_prompt
+            print("Using topic prompt as input text.")
 
-        skills = extract_skills_from_text(text, num_skills=num_skills)
-        print(f"Generated skills: {skills}") # Log generated skills
+        skills = extract_skills_from_text(text)
+        print(f"Generated skills: {skills}")
 
         return JsonResponse({'skills': skills})
+
     except Exception as e:
-        print(f"Error generating skills: {e}") # Log the exception
-        return JsonResponse({'error': 'Error processing PDF'}, status=500)
+        print(f"Error generating skills: {e}")
+        return JsonResponse({'error': 'Error processing input'}, status=500)
+
 
 def home(request):
     return render(request, 'home.html')

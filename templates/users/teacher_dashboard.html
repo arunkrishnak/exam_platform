@@ -110,64 +110,65 @@
 </div>
 
 <script>
-    document.addEventListener('DOMContentLoaded', function() {  //Document Object Model (DOM) is fully loaded and parsed
+    document.addEventListener('DOMContentLoaded', function() {
         const generateSkillsButton = document.getElementById('generate-skills-button');
         const pdfDocumentInput = document.getElementById('id_pdf_document');
+        const topicPromptInput = document.getElementById('id_topic_prompt');
         const skillsInput = document.getElementById('id_skills');
         const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
 
-        generateSkillsButton.addEventListener('click', function() {
-            if (pdfDocumentInput.files.length === 0) {
-                alert("Please upload a PDF file first.");
+        generateSkillsButton.addEventListener('click', function () {
+            const topicPrompt = topicPromptInput.value.trim();
+            const pdfFile = pdfDocumentInput.files[0];
+
+            if (!pdfFile && !topicPrompt) {
+                alert("Please enter a Topic Prompt or upload a PDF file.");
                 return;
             }
 
-            // Show loading indicator and disable button
+            // UI feedback
             generateSkillsButton.disabled = true;
-            const originalButtonText = generateSkillsButton.textContent;
-            generateSkillsButton.textContent = 'Generating...';
+            const originalText = generateSkillsButton.textContent;
+            generateSkillsButton.textContent = "Generating...";
 
             const formData = new FormData();
-            formData.append('pdf_file', pdfDocumentInput.files[0]);
+            if (pdfFile) formData.append("pdf_file", pdfFile);
+            if (topicPrompt) formData.append("topic_prompt", topicPrompt);
 
-            const fetchUrl = "{% url 'generate_skills_from_pdf' %}";
-            console.log('Fetching URL:', fetchUrl); // Log the URL being fetched
-
-            fetch(fetchUrl, {
-                method: 'POST', 
-                body: formData,  //Used to construct key-value pairs representing form fields and their values 
+            fetch("{% url 'generate_skills_from_pdf' %}", {
+                method: "POST",
                 headers: {
-                    'X-CSRFToken': csrfToken
-                }
+                    "X-CSRFToken": csrfToken
+                },
+                body: formData
             })
             .then(response => {
                 if (!response.ok) {
-                    return response.json().then(err => { throw new Error(err.error || 'Network response was not ok'); });
+                    return response.json().then(err => {
+                        throw new Error(err.error || 'Something went wrong.');
+                    });
                 }
                 return response.json();
             })
             .then(data => {
-                console.log('Response data:', data); // Log the entire response data
                 if (data.skills) {
-                    console.log('Generated skills:', data.skills); // Log the skills array
                     skillsInput.value = data.skills.join(', ');
                     alert("Skills generated successfully!");
                 } else {
-                    console.log('No skills generated or skills field missing.'); // Log if skills are missing
-                    alert("Could not generate skills from the PDF.");
+                    alert("No skills generated.");
                 }
             })
-            .catch(error => {
-                console.error('Error:', error);
-                alert("An error occurred while generating skills: " + error.message);
+            .catch(err => {
+                console.error("Error generating skills:", err);
+                alert("An error occurred while generating skills: " + err.message);
             })
             .finally(() => {
-                // Re-enable button and restore text
                 generateSkillsButton.disabled = false;
-                generateSkillsButton.textContent = originalButtonText;
+                generateSkillsButton.textContent = originalText;
             });
         });
     });
 </script>
+
 
 {% endblock %}
