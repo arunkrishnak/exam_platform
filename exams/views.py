@@ -29,7 +29,8 @@ def extract_skills_from_text(text, num_skills=10):
     """Extract skills using AI-based extraction with GPT."""
     try:
         prompt_text = f"""Analyze the following text and identify up to {num_skills} Main topics mentioned in the text.
-        Provide the skills as a comma-separated list.
+Provide ONLY the skills as a comma-separated list, with no additional text or formatting.
+        
 
         Text:
         {text}
